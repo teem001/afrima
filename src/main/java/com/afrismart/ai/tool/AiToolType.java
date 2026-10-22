@@ -1,0 +1,14 @@
+package com.afrismart.ai.tool;
+
+public enum AiToolType {
+    SEARCH_PRODUCTS_NEARBY,
+    COMPARE_PRICES,
+    FIND_ALTERNATIVE_STORES,
+    GET_STORE_DETAILS,
+    PLACE_ORDER,
+    GET_MY_ORDERS,
+    GET_MY_INVENTORY,
+    GET_LOW_STOCK_ITEMS,
+    GET_INCOMING_ORDERS,
+    UPDATE_STOCK
+}

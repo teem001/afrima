@@ -1,0 +1,40 @@
+@startuml msc-twin-sync
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+autonumber "<b>0."
+
+participant "AHDT client" as App
+participant "RealtimeHandler\n(WebSocket)" as WS
+participant "RealtimeRouter" as Router
+participant "AuthService /\nJwtService" as Auth
+participant "SearchService\n(APDT query)" as Search
+participant "SessionRegistry" as Reg
+participant "RealtimeEventRelay" as Relay
+participant "InventoryService" as Inv
+
+App -> WS : connect ws://host/ws
+App -> WS : {id:1, type:"auth.login", payload}
+WS -> Router : route(session, message)
+Router -> Auth : login(email, password)
+Auth --> Router : JWT + user
+Router -> Reg : attach user to session
+Router --> App : {id:1, ok:true, data:AuthResponse}
+
+App -> WS : {id:2, type:"search", q, lat, lng}
+WS -> Router : route
+Router -> Search : search(q, lat, lng, radius)
+Search -> Search : bounding box query,\nhaversine filter, sort by\ndistance then price
+Router --> App : {id:2, ok:true, data:SearchResponse}
+
+== Physical change at an access point ==
+
+Inv -> Inv : upsert / reserve (transaction)
+Inv -> Relay : StockChangedEvent
+note right of Relay : @TransactionalEventListener\nfires only after commit
+Relay -> Reg : broadcast("stock.changed")
+Reg --> App : {event:"stock.changed", storeId,\nproductId, quantity, price}
+App -> App : update twin view\n(map pins, offer list, cart)
+@enduml

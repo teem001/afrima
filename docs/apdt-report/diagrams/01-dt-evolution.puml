@@ -1,0 +1,20 @@
+@startuml dt-evolution
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam rectangle {
+  RoundCorner 12
+  BorderColor #2F4858
+}
+left to right direction
+
+rectangle "**Digital Twin (DT)**\n2002 – 2015\n\nMirror of one physical asset\nData flows physical -> virtual\nSimulation, monitoring\n(Grieves; NASA)" as DT #DCEBF7
+rectangle "**Cognitive DT (CDT)**\n2018 – 2022\n\nDT + knowledge graphs,\nmachine learning, reasoning\nLearns, predicts, explains\n(Lu et al.; Zheng et al.)" as CDT #D5F0E3
+rectangle "**Agentic DT (ADT)**\n2023 –\n\nCDT + goal-directed agents\nLLM tool use, planning\nActs on the physical world\nwith human oversight" as ADT #FBE3C8
+rectangle "**APDT + AHDT**\n(this work)\n\nAccess Point twin <-> Human twin\nAgentic search, compare, reroute\nas a service for patients" as OURS #F6D0D6
+
+DT --> CDT : add cognition
+CDT --> ADT : add agency
+ADT --> OURS : apply to patient\naccess in SSA
+@enduml

@@ -1,0 +1,76 @@
+@startuml use-cases-patient
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam usecase {
+  BackgroundColor #EEF6EE
+  BorderColor #2F4858
+}
+left to right direction
+
+actor "Patient\n(owner of AHDT)" as Patient
+actor "LLM Provider" as LLM <<system>>
+
+rectangle "AHDT services (patient side)" {
+  usecase "UC1 Find medicine at\nnearby access points" as UC1
+  usecase "UC2 Compare prices\nand distance" as UC2
+  usecase "UC3 Check preferred\naccess point" as UC3
+  usecase "UC4 Reroute to an\nalternative access point" as UC4
+  usecase "UC5 Reserve / order\nmedicine" as UC5
+  usecase "UC6 Track orders and\nverify receipt hash" as UC6
+  usecase "UC7 Converse with\nAHDT agent" as UC7
+  usecase "UC8 Share device\nlocation (consent)" as UC8
+}
+
+Patient --> UC1
+Patient --> UC2
+Patient --> UC3
+Patient --> UC5
+Patient --> UC6
+Patient --> UC7
+
+UC1 ..> UC8 : <<include>>
+UC2 ..> UC8 : <<include>>
+UC4 .> UC3 : <<extend>>\n[out of stock]
+UC7 ..> UC1 : <<include>>
+UC7 ..> UC4 : <<include>>
+UC7 ..> UC5 : <<include>>
+UC7 --> LLM
+@enduml
+
+@startuml use-cases-operator
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam usecase {
+  BackgroundColor #F3EEFA
+  BorderColor #2F4858
+}
+left to right direction
+
+actor "Access Point Operator\n(pharmacist / PPMV)" as Operator
+actor "LLM Provider" as LLM <<system>>
+
+rectangle "APDT services (access point side)" {
+  usecase "UC9 Monitor stock,\nprices and hours" as UC9
+  usecase "UC10 Identify low stock\nand restock quantity" as UC10
+  usecase "UC11 Update stock\n(with confirmation)" as UC11
+  usecase "UC12 Handle incoming\norders" as UC12
+  usecase "UC13 Converse with\nAPDT agent" as UC13
+  usecase "UC14 Publish twin\nchanges in real time" as UC14
+}
+
+Operator --> UC9
+Operator --> UC10
+Operator --> UC11
+Operator --> UC12
+Operator --> UC13
+
+UC13 ..> UC10 : <<include>>
+UC13 ..> UC11 : <<include>>
+UC13 ..> UC12 : <<include>>
+UC11 ..> UC14 : <<include>>
+UC13 --> LLM
+@enduml

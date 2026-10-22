@@ -1,0 +1,60 @@
+@startuml msc-reroute-pens
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+autonumber "<b>0."
+
+actor Consumer
+participant "Consumer app\n(web / mobile)" as App
+participant "Realtime gateway\n(/ws)" as WS
+participant "AiAgentService" as Agent
+participant "ModelEngine\n(LLM)" as LLM
+participant "AiToolRegistry" as Tools
+participant "Store twin services\n(Search, Store, Inventory)" as APDT
+participant "OrderService\n+ LedgerHasher" as Orders
+
+Consumer -> App : "I need a pack of pens,\nmy usual shop is Surulere"
+App -> WS : ai.chat {message, lat, lng, clientContext}
+WS -> Agent : chat(user, request, progress)
+Agent -> Agent : open conversation; build prompt\n(system + tool memory + history)
+Agent -> LLM : complete(messages, tools for CONSUMER)
+LLM --> Agent : tool_call GET_STORE_DETAILS\n{storeName:"Surulere", query:"pens"}
+Agent -> Tools : invokeJson(name, args, AHDT context)
+Tools -> APDT : findByName, listByStore
+APDT --> Tools : PEN-PACK-10 qty = 0
+Tools --> Agent : ok "no stock - use FIND_ALTERNATIVE_STORES"
+WS --> App : ai.progress toolFinished
+Agent -> LLM : complete(+ tool result)
+LLM --> Agent : tool_call FIND_ALTERNATIVE_STORES\n{query:"pens", excludeStoreName:"Surulere"}
+Agent -> Tools : invokeJson(...)
+Tools -> APDT : findOffers(bbox 2x radius, minQty,\nexcluded stores) + haversine sort
+APDT --> Tools : Yaba Campus Mart ~1.1 km,\nIkeja Computer Village Mart ~10 km
+Tools --> Agent : recommended = Yaba Campus Mart
+Agent -> LLM : complete(+ tool result)
+LLM --> Agent : "Surulere is out. Yaba Campus Mart\nhas pens for NGN 750. Order?"
+Agent -> Agent : recordExchange (messages + tool invocations)
+Agent --> WS : AiChatResponse
+WS --> App : reply + tool steps
+App --> Consumer : recommendation card + map
+
+== Explicit confirmation required before PLACE_ORDER ==
+
+Consumer -> App : "Yes, order two packs"
+App -> WS : ai.chat {conversationId, message}
+WS -> Agent : chat(...)
+Agent -> LLM : complete(...)
+LLM --> Agent : tool_call PLACE_ORDER {storeId, items}
+Agent -> Tools : invokeJson(...)
+Tools -> Orders : place(consumer, request)
+Orders -> APDT : reserve(storeId, lines)\n[pessimistic lock, decrement]
+Orders -> Orders : SHA-256 ledger hash
+Orders --> Tools : order PLACED + ledgerHash
+Orders -> WS : OrderEvent / StockChangedEvent\n(after commit)
+WS --> App : order.placed, stock.changed
+Tools --> Agent : order view
+Agent -> LLM : complete(+ tool result)
+LLM --> Agent : "Order placed. Receipt dc5fedf0bea3"
+Agent --> App : reply
+@enduml

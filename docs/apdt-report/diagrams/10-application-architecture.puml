@@ -1,0 +1,92 @@
+@startuml application-architecture
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam packageStyle rectangle
+skinparam package {
+  BorderColor #2F4858
+  FontSize 12
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #2F4858
+}
+
+title AfriSmart Application Architecture\nAgentic Smart City E-commerce (Blockchain + Digital Twins)
+
+package "A. User Layer" #F4F8FC {
+  [Consumer / AHDT app\n(search, map, cart, orders, assistant)] as ConsumerUI
+  [Merchant / APDT dashboard\n(stock, orders, assistant)] as MerchantUI
+}
+
+package "B. Perception Layer" #EEF6EE {
+  [Device location &\npreferences] as Loc
+  [Store hours &\nopen-now] as Hours
+  [Live stock &\nprices] as Stock
+}
+
+package "C. Network Layer" #E8F0FA {
+  [WebSocket /ws\n(request + push)] as WS
+  [REST /api/v1\n(JWT, OpenAPI)] as REST
+}
+
+package "D. Support Layer — Agentic + Digital Twin Intelligence" #FFF5E8 {
+  package "Agentic AI" {
+    [AiAgentService\n(model / tool loop)] as Agent
+    [AiToolRegistry\n(role-filtered tools)] as Tools
+    [ModelEngine\n(OpenAI-compatible)] as Model
+  }
+  package "Digital Twins" {
+    [APDT — Access Point Twin\n(Store, Inventory, Search, Demand)] as APDT
+    [AHDT — Adaptive Human Twin\n(Identity, Context, History, Memory)] as AHDT
+  }
+}
+
+package "E. Blockchain / Trust Layer" #FBEAEC {
+  [OrderService +\nLedgerHasher (SHA-256)] as Ledger
+  [Public ledger anchor\n(future)] as Chain
+}
+
+package "F. Application Layer" #F3EEFA {
+  [Recommendations &\nprice ranges] as Recs
+  [Alternative shops &\nrerouting] as Alt
+  [Checkout &\norder tracking] as Checkout
+}
+
+package "G. Smart City Service Layer" #EDEDED {
+  [Urban retailers &\naccess points] as Retail
+  [Logistics &\npayments (planned)] as Logistics
+}
+
+cloud "LLM Provider\n(OpenAI / Groq /\nOpenRouter / Ollama)" as LLM
+database "H2 / PostgreSQL\n(Flyway)" as DB
+
+ConsumerUI --> WS
+MerchantUI --> WS
+ConsumerUI ..> REST
+MerchantUI ..> REST
+Loc --> ConsumerUI
+Hours --> APDT
+Stock --> APDT
+WS --> Agent
+WS --> APDT
+WS --> Checkout
+REST --> Agent
+Agent --> Tools
+Agent --> Model
+Model --> LLM
+Tools --> APDT
+Tools --> AHDT
+Tools --> Ledger
+APDT --> Recs
+APDT --> Alt
+AHDT --> Agent
+Ledger --> Checkout
+Ledger ..> Chain
+APDT --> DB
+AHDT --> DB
+Ledger --> DB
+Retail --> APDT
+Logistics ..> Checkout
+@enduml

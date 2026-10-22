@@ -1,0 +1,40 @@
+@startuml use-cases-consumer
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam usecase {
+  BackgroundColor #EEF6EE
+  BorderColor #2F4858
+}
+left to right direction
+
+actor "Consumer\n(owner of AHDT)" as Consumer
+actor "LLM Provider" as LLM <<system>>
+
+rectangle "AfriSmart — consumer / AHDT services" {
+  usecase "UC1 Find product at\nnearby stores" as UC1
+  usecase "UC2 Compare prices\nand distance" as UC2
+  usecase "UC3 Check preferred\nstore" as UC3
+  usecase "UC4 Reroute to an\nalternative store" as UC4
+  usecase "UC5 Place order /\nreserve stock" as UC5
+  usecase "UC6 Track orders and\nverify receipt hash" as UC6
+  usecase "UC7 Converse with\nAfriSmart agent" as UC7
+  usecase "UC8 Share device\nlocation (consent)" as UC8
+}
+
+Consumer --> UC1
+Consumer --> UC2
+Consumer --> UC3
+Consumer --> UC5
+Consumer --> UC6
+Consumer --> UC7
+
+UC1 ..> UC8 : <<include>>
+UC2 ..> UC8 : <<include>>
+UC4 .> UC3 : <<extend>>\n[out of stock]
+UC7 ..> UC1 : <<include>>
+UC7 ..> UC4 : <<include>>
+UC7 ..> UC5 : <<include>>
+UC7 --> LLM
+@enduml

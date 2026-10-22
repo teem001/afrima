@@ -1,0 +1,50 @@
+@startsalt dashboard-wireframe
+{+
+  {* AfriSmart | <b>APDT Dashboard</b> | Yaba Community Pharmacy | Open now | Live (WebSocket) | Sign out }
+  {
+    {+
+      <b>Access point twin</b>
+      {#
+        <b>Product</b> | <b>On hand</b> | <b>Price</b> | <b>Sold 7d</b> | <b>Status</b>
+        Artemether-Lumefantrine 20/120 | 6 | NGN 4,500 | 2 | <color:red>Low - restock 14</color>
+        Amlodipine 5mg | 8 | NGN 3,800 | 0 | <color:orange>Low - restock 12</color>
+        Oral rehydration salts | 40 | NGN 2,500 | 0 | OK
+        Paracetamol 500mg | 120 | NGN 600 | 0 | OK
+      }
+      .
+      <b>Incoming orders</b>
+      {#
+        <b>Time</b> | <b>Items</b> | <b>Total</b> | <b>Receipt</b> | <b>Action</b>
+        09:14 | 1 x Artemether-Lumefantrine | NGN 4,500 | dc5fedf0bea3 | [Accept]
+      }
+      .
+      <b>APDT agent</b>
+      {+
+        "What should I restock this week?          "
+        [Ask] | [Show low stock] | [Incoming orders]
+      }
+    } | {+
+      <b>Embedded AHDT panel (consenting patient)</b>
+      {
+        Patient | Ada O. (consumer)
+        Location | Yaba, 0.5 km away
+        Current need | antimalarial (ACT)
+        Usual access point | Ojuelegba Health Store
+        Usual store stock | <color:red>0 - rerouted here</color>
+        Orders (90 days) | 1
+        Next refill (predicted) | n/a - acute course
+        Consent | location: this session only
+      }
+      .
+      <b>Patient journey</b>
+      {
+        (X) Searched "malaria" near Yaba
+        (X) Usual store out of stock
+        (X) Rerouted: Yaba Community Pharmacy
+        (X) Order placed, hash sealed
+        () Pick-up confirmed
+      }
+    }
+  }
+}
+@endsalt

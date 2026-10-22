@@ -1,0 +1,15 @@
+target/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+.DS_Store
+*.log
+.env
+.env.local
+architecture-diagram.jpeg
+data/
+# Frontend lives in teem001/afrima-ui
+web/

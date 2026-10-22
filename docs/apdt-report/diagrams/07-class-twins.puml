@@ -1,0 +1,133 @@
+@startuml class-twins
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam classAttributeIconSize 0
+hide empty methods
+
+abstract class BaseEntity {
+  - id : UUID
+  - createdAt : Instant
+  - updatedAt : Instant
+}
+
+package "APDT (access point twin)" #F3EEFA {
+  class Store {
+    - merchantId : UUID
+    - name : String
+    - address : String
+    - latitude : double
+    - longitude : double
+    - openAt : LocalTime
+    - closeAt : LocalTime
+    - deliveryRadiusM : int
+    - active : boolean
+  }
+  class InventoryItem {
+    - storeId : UUID
+    - productId : UUID
+    - quantity : int
+    - unitPriceKobo : long
+    - currency : String
+  }
+  class Product {
+    - sku : String
+    - name : String
+    - description : String
+  }
+  class ProductAlias {
+    - alias : String
+  }
+  class StoreHours <<utility>> {
+    + isOpen(openAt, closeAt, now) : boolean
+  }
+  class SalesTally <<record>> {
+    storeId : UUID
+    productId : UUID
+    units : Long
+  }
+}
+
+package "AHDT (adaptive human twin)" #EEF6EE {
+  class UserAccount {
+    - email : String
+    - fullName : String
+    - phone : String
+    - role : Role
+    - passwordHash : String
+  }
+  enum Role {
+    CONSUMER
+    MERCHANT
+  }
+  class AiConversation {
+    - userId : UUID
+    - title : String
+    - lastMessageAt : Instant
+  }
+  class AiMessage {
+    - seq : int
+    - role : String
+    - content : String
+  }
+  class AiToolInvocation {
+    - seq : int
+    - toolName : String
+    - argumentsJson : String
+    - resultJson : String
+    - success : boolean
+  }
+  class AiToolContext <<record>> {
+    user : AuthUser
+    latitude : Double
+    longitude : Double
+    + location(args) : Optional<GeoPoint>
+  }
+}
+
+package "Shared transactions" #FBEAEC {
+  class CustomerOrder {
+    - consumerId : UUID
+    - storeId : UUID
+    - status : OrderStatus
+    - totalKobo : long
+    - ledgerHash : String
+  }
+  class OrderLine {
+    - productId : UUID
+    - quantity : int
+    - unitPriceKobo : long
+  }
+  enum OrderStatus {
+    PLACED
+    ACCEPTED
+    CANCELLED
+  }
+  class LedgerHasher <<utility>> {
+    + hash(orderId, consumerId, storeId,\n total, currency, createdAt, lines) : String
+  }
+}
+
+note right of BaseEntity
+  Every persistent entity in this diagram
+  extends BaseEntity (UUID id + audit times).
+  Generalisation arrows are omitted for clarity.
+end note
+
+UserAccount "1" -- "0..*" Store : operates >
+Store "1" *-- "0..*" InventoryItem : stocks >
+Product "1" -- "0..*" InventoryItem
+Product "1" *-- "0..*" ProductAlias
+UserAccount --> Role
+UserAccount "1" -- "0..*" CustomerOrder : places >
+Store "1" -- "0..*" CustomerOrder : receives >
+CustomerOrder "1" *-- "1..*" OrderLine
+CustomerOrder --> OrderStatus
+CustomerOrder ..> LedgerHasher : sealed by
+UserAccount "1" -- "0..*" AiConversation
+AiConversation "1" *-- "0..*" AiMessage
+AiConversation "1" *-- "0..*" AiToolInvocation
+Store ..> StoreHours
+SalesTally ..> CustomerOrder : derived from
+@enduml

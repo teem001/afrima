@@ -1,0 +1,84 @@
+@startuml framework
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam componentStyle rectangle
+skinparam package {
+  BorderColor #2F4858
+  FontSize 12
+}
+
+package "User layer" #F4F8FC {
+  [AHDT patient app\n(search, map, cart,\nassistant)] as PatientApp
+  [APDT dashboard\n(stock, orders, assistant)\n+ embedded AHDT panel] as Dashboard
+}
+
+package "Network layer" #EEF6EE {
+  [WebSocket gateway /ws\n(request/response + push)] as Gateway
+  [REST API /api/v1\n(JWT, OpenAPI)] as Rest
+}
+
+package "Agentic layer (ai module)" #FFF5E8 {
+  [AiAgentService\n(model / tool loop)] as AgentSvc
+  [AiPrompts\n(role personas, rules)] as Prompts
+  [AiToolRegistry\n(role-filtered tools)] as Registry
+  [Consumer tools\n(AHDT side)] as CTools
+  [Merchant tools\n(APDT side)] as MTools
+  [ModelEngineRegistry\n-> OpenAiEngine] as Engines
+  [AiConversationService\n(memory)] as Memory
+}
+
+package "Twin layer" #F3EEFA {
+  package "APDT" {
+    [StoreService\n(location, hours, open-now)] as Stores
+    [InventoryService\n(stock, price, reserve)] as Inventory
+    [SearchService\n(geo offers)] as Search
+    [Demand signals\n(units sold, 7 days)] as Demand
+  }
+  package "AHDT" {
+    [Identity + role\n(UserAccount)] as Identity
+    [Context\n(location, screen, cart)] as Context
+    [History\n(orders, conversations,\ntool memory)] as History
+  }
+}
+
+package "Trust layer" #FBEAEC {
+  [OrderService\n+ LedgerHasher (SHA-256)] as Ledger
+  [Blockchain anchor\n(future)] as Chain
+}
+
+package "Data + platform" #EDEDED {
+  database "H2 / PostgreSQL\n(Flyway V1, V2)" as DB
+  [Spring Boot 3.4 + Spring Modulith\n(module boundaries verified)] as Platform
+}
+
+cloud "LLM provider\n(OpenAI, Groq,\nOpenRouter, Ollama)" as LLM
+
+PatientApp --> Gateway
+Dashboard --> Gateway
+PatientApp ..> Rest
+Gateway --> AgentSvc
+Gateway --> Search
+Gateway --> Inventory
+Rest --> AgentSvc
+AgentSvc --> Prompts
+AgentSvc --> Registry
+AgentSvc --> Engines
+AgentSvc --> Memory
+Engines --> LLM
+Registry --> CTools
+Registry --> MTools
+CTools --> Search
+CTools --> Stores
+CTools --> Ledger
+MTools --> Inventory
+MTools --> Demand
+Context ..> CTools : device location\nwins
+History ..> Memory
+Ledger --> Inventory
+Ledger ..> Chain
+Inventory --> DB
+Ledger --> DB
+Memory --> DB
+@enduml

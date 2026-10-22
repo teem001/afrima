@@ -1,0 +1,121 @@
+@startuml class-agentic
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam classAttributeIconSize 0
+
+class AiController {
+  + status() : AiStatus
+  + tools() : List<ToolDefinition>
+  + invoke(name, InvokeToolRequest) : ToolExecution
+  + chat(AiChatRequest) : AiChatResponse
+  + conversations() : List<ConversationSummary>
+}
+
+class AiAgentService {
+  - maxToolRounds : int
+  - historyWindow : int
+  + chat(user, request, listener) : AiChatResponse
+}
+
+class AiPrompts {
+  + systemPrompt(context) : String
+}
+
+class AiConversationService {
+  + open(user, id, firstMessage) : UUID
+  + history(id, window) : List<ChatMessage>
+  + recentToolContext(id, turns) : Optional<String>
+  + recordExchange(id, user, reply, executions)
+}
+
+interface AiProgressListener {
+  + conversationOpened(id)
+  + modelTurn(round)
+  + toolStarted(tool)
+  + toolFinished(tool, success, message)
+}
+
+class AiToolRegistry {
+  + definitionsFor(role) : List<ToolDefinition>
+  + availableTo(name, role) : Optional<AiTool>
+  + invokeJson(name, json, ctx) : ToolExecution
+  + invoke(name, args, ctx) : ToolExecution
+}
+
+interface AiTool {
+  + type() : AiToolType
+  + description() : String
+  + parameters() : JsonSchema
+  + roles() : Set<Role>
+  + execute(ToolArgs, AiToolContext) : ToolResult
+  + definition() : ToolDefinition
+}
+
+package "Consumer tools (AHDT side)" #EEF6EE {
+  class SearchProductsNearbyTool
+  class ComparePricesTool
+  class FindAlternativeStoresTool
+  class GetStoreDetailsTool
+  class PlaceOrderTool
+  class GetMyOrdersTool
+}
+
+package "Merchant tools (APDT side)" #F3EEFA {
+  class GetMyInventoryTool
+  class GetLowStockItemsTool
+  class GetIncomingOrdersTool
+  class UpdateStockTool
+}
+
+interface ModelEngine {
+  + supports(AiEngineType) : boolean
+  + isConfigured() : boolean
+  + model() : String
+  + complete(messages, tools) : ChatMessage
+}
+
+class ModelEngineRegistry {
+  + active() : ModelEngine
+  + find() : Optional<ModelEngine>
+}
+
+class OpenAiEngine
+class ToolResult <<record>> {
+  success : boolean
+  message : String
+  errorCode : String
+  data : Object
+}
+class ChatMessage <<record>> {
+  role : String
+  content : String
+  toolCalls : List<ToolCall>
+  toolCallId : String
+}
+
+AiController --> AiAgentService
+AiController --> AiToolRegistry
+AiController --> AiConversationService
+AiAgentService --> AiPrompts
+AiAgentService --> AiConversationService
+AiAgentService --> AiToolRegistry
+AiAgentService --> ModelEngineRegistry
+AiAgentService ..> AiProgressListener
+AiAgentService ..> ChatMessage
+ModelEngineRegistry o-- "1..*" ModelEngine
+ModelEngine <|.. OpenAiEngine
+AiToolRegistry o-- "1..*" AiTool
+AiTool ..> ToolResult
+AiTool <|.. SearchProductsNearbyTool
+AiTool <|.. ComparePricesTool
+AiTool <|.. FindAlternativeStoresTool
+AiTool <|.. GetStoreDetailsTool
+AiTool <|.. PlaceOrderTool
+AiTool <|.. GetMyOrdersTool
+AiTool <|.. GetMyInventoryTool
+AiTool <|.. GetLowStockItemsTool
+AiTool <|.. GetIncomingOrdersTool
+AiTool <|.. UpdateStockTool
+@enduml

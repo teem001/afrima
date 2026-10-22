@@ -1,0 +1,35 @@
+@startuml use-cases-merchant
+!pragma layout smetana
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam usecase {
+  BackgroundColor #F3EEFA
+  BorderColor #2F4858
+}
+left to right direction
+
+actor "Merchant\n(operates APDT)" as Merchant
+actor "LLM Provider" as LLM <<system>>
+
+rectangle "AfriSmart — merchant / APDT services" {
+  usecase "UC9 Monitor stock,\nprices and hours" as UC9
+  usecase "UC10 Identify low stock\nand restock quantity" as UC10
+  usecase "UC11 Update stock\n(with confirmation)" as UC11
+  usecase "UC12 Handle incoming\norders" as UC12
+  usecase "UC13 Converse with\nmerchant agent" as UC13
+  usecase "UC14 Publish twin\nchanges in real time" as UC14
+}
+
+Merchant --> UC9
+Merchant --> UC10
+Merchant --> UC11
+Merchant --> UC12
+Merchant --> UC13
+
+UC13 ..> UC10 : <<include>>
+UC13 ..> UC11 : <<include>>
+UC13 ..> UC12 : <<include>>
+UC11 ..> UC14 : <<include>>
+UC13 --> LLM
+@enduml

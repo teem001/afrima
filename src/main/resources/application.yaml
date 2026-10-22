@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: afrismart
+  datasource:
+    url: ${AFRISMART_DB_URL:jdbc:h2:mem:afrismart;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1}
+    username: sa
+    password: ""
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${PORT:${SERVER_PORT:8087}}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+afrismart:
+  jwt:
+    issuer: AfriSmart
+    secret: ${AFRISMART_JWT_SECRET:local-only-change-me-afrismart-jwt-hs256-key}
+    ttl: 24h
+  search:
+    default-radius-meters: 15000
+    max-results: 50
+  clock:
+    zone: Africa/Lagos
+  ai:
+    engine: ${AFRISMART_AI_ENGINE:OPENAI}
+    max-tool-rounds: 6
+    history-window: 12
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      api-key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_MODEL:gpt-4o-mini}
+      timeout: 60s

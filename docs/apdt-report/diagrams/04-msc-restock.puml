@@ -1,0 +1,47 @@
+@startuml msc-restock
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+autonumber "<b>0."
+
+actor "Access Point\nOperator" as Op
+participant "APDT dashboard" as Dash
+participant "Realtime gateway\n(/ws)" as WS
+participant "AiAgentService" as Agent
+participant "ModelEngine\n(LLM)" as LLM
+participant "Merchant tools" as Tools
+participant "OrderService" as Orders
+participant "InventoryService" as Inv
+participant "Other clients\n(AHDT apps, dashboards)" as Others
+
+Op -> Dash : "What should I restock?"
+Dash -> WS : ai.chat {message}
+WS -> Agent : chat(merchant, request)
+Agent -> LLM : complete(messages, tools for MERCHANT)
+LLM --> Agent : tool_call GET_LOW_STOCK_ITEMS {threshold:10}
+Agent -> Tools : invoke
+Tools -> Inv : listByStore (each owned store)
+Tools -> Orders : unitsSoldSince(storeIds, now - 7 days)
+Tools -> Tools : restock = max(0, max(2 x threshold,\n2 x unitsSold) - quantity)
+Tools --> Agent : ACT qty 6, sold 2, suggest 14
+Agent -> LLM : complete(+ tool result)
+LLM --> Agent : "Restock Artemether-Lumefantrine:\nadd 14 to reach 20. Confirm?"
+Agent --> Dash : reply
+Dash --> Op : suggestion
+
+Op -> Dash : "Yes, set it to 20"
+Dash -> WS : ai.chat {conversationId, message}
+WS -> Agent : chat(...)
+Agent -> LLM : complete(...)
+LLM --> Agent : tool_call UPDATE_STOCK\n{storeId, productId, quantity:20}
+Agent -> Tools : invoke
+Tools -> Inv : upsert(merchant, storeId, qty 20,\nexisting price)
+Inv -> Inv : requireOwned(store, merchant)
+Inv --> WS : StockChangedEvent (after commit)
+WS --> Others : stock.changed broadcast
+WS --> Dash : stock.changed
+Tools --> Agent : StockLine qty 20
+Agent --> Dash : "Done - 20 in stock."
+@enduml
