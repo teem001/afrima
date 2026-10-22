@@ -91,6 +91,19 @@ public class InventoryService {
         return reserved;
     }
 
+    /** Puts reserved stock back on the shelf (order cancelled before fulfilment). */
+    @Transactional
+    public void restore(UUID storeId, List<OrderLineRequest> lines) {
+        for (OrderLineRequest line : lines) {
+            InventoryItem item = items.lockByStoreIdAndProductId(storeId, line.productId()).orElse(null);
+            if (item == null) {
+                continue;
+            }
+            item.setQuantity(item.getQuantity() + line.quantity());
+            publishStockChanged(item);
+        }
+    }
+
     private void publishStockChanged(InventoryItem item) {
         events.publishEvent(new StockChangedEvent(
                 item.getStoreId(), item.getProductId(), item.getQuantity(), item.getUnitPriceKobo()

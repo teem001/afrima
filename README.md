@@ -110,6 +110,14 @@ curl -s -X POST localhost:8087/api/v1/ai/tools/FIND_ALTERNATIVE_STORES/invoke \
   -d '{"arguments":{"query":"biro","quantity":3,"excludeStoreName":"Surulere"},"latitude":6.5158,"longitude":3.3791}'
 ```
 
+## Wallets, escrow, payouts, twins & anchoring
+
+Demo-money payment layer (no real funds): every user gets a double-entry-backed **wallet**. Placing an order debits the consumer wallet into a per-order **escrow** hold (insufficient balance rolls the order and stock reservation back); when the merchant marks the order **fulfilled**, escrow releases to the merchant minus a **5% commission**, and the merchant can request a **simulated payout**. Cancelling before fulfilment restores stock and refunds escrow. On fulfilment the order's SHA-256 ledger hash is **anchored** in a Merkle batch (`SIMULATED` tx reference until a real public-chain client is plugged in); `GET /api/v1/verify/{orderId}` (public) recomputes the hash and validates the Merkle proof.
+
+**Digital twins** are live projections (no separate twin store): the shop twin combines stock, sales velocity, stock-out projections, money state and suggestions; the customer twin combines wallet, escrow, orders and spend. The twin also runs **what-if simulations** (restock quantity / price change → stock-out and 7-day revenue projections) that never touch real stock. Twins observe and suggest; humans confirm every action.
+
+Key routes (REST + WebSocket equivalents): `wallet.me/fund/transactions`, `payments.order`, `payments.merchantSummary`, `payouts.request/mine`, `orders.fulfil/cancel`, `twin.shop/me/simulate`, `verify`, `anchors.pending`. The AI also gains a `GET_MY_WALLET` tool for both roles.
+
 ## Realtime WebSocket
 
 The web app talks to the backend over one WebSocket at `/ws`; the REST endpoints stay for Swagger, curl, and tests. Both transports call the same controllers, so validation, role checks, and error codes are identical.

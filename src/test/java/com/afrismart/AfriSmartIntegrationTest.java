@@ -174,6 +174,11 @@ class AfriSmartIntegrationTest {
     @Test
     void orderThenMerchantSeesIncomingOrderAndSalesVelocity() throws Exception {
         String consumer = login("ada@afrismart.ng");
+        mvc.perform(post("/api/v1/wallet/fund")
+                        .header("Authorization", "Bearer " + consumer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("amountKobo", 1_000_000))))
+                .andExpect(status().isOk());
         JsonNode offer = objectMapper.readTree(invoke(consumer, "SEARCH_PRODUCTS_NEARBY", Map.of("query", "pens"))
                 .andReturn().getResponse().getContentAsString()).at("/result/data/offers/0");
 

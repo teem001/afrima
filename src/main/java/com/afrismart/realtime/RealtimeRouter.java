@@ -30,6 +30,9 @@ import com.afrismart.inventory.UpsertInventoryRequest;
 import com.afrismart.marketplace.SearchController;
 import com.afrismart.orders.OrderController;
 import com.afrismart.orders.PlaceOrderRequest;
+import com.afrismart.payments.PaymentController;
+import com.afrismart.twins.TwinController;
+import com.afrismart.twins.TwinViews;
 import com.afrismart.shared.api.ApiException;
 import com.afrismart.shared.api.ErrorCodes;
 import com.afrismart.shared.api.ErrorResponse;
@@ -101,6 +104,8 @@ class RealtimeRouter {
             StoreController stores,
             InventoryController inventory,
             OrderController orders,
+            PaymentController payments,
+            TwinController twins,
             AiController ai,
             AiAgentService agent,
             JwtService jwtService,
@@ -147,6 +152,22 @@ class RealtimeRouter {
         routes.put("orders.get", (session, id, p) -> orders.get(uuid(p, "orderId")));
         routes.put("orders.accept", (session, id, p) -> orders.accept(uuid(p, "orderId")));
         routes.put("orders.merchant", (session, id, p) -> orders.merchantOrders());
+        routes.put("orders.fulfil", (session, id, p) -> orders.fulfil(uuid(p, "orderId")));
+        routes.put("orders.cancel", (session, id, p) -> orders.cancel(uuid(p, "orderId")));
+        routes.put("verify", (session, id, p) -> orders.verify(uuid(p, "orderId")));
+        routes.put("anchors.pending", (session, id, p) -> orders.anchorPending());
+
+        routes.put("wallet.me", (session, id, p) -> payments.wallet());
+        routes.put("wallet.fund", (session, id, p) -> payments.fund(read(p, PaymentController.FundRequest.class)));
+        routes.put("wallet.transactions", (session, id, p) -> payments.transactions());
+        routes.put("payments.order", (session, id, p) -> payments.orderPayment(uuid(p, "orderId")));
+        routes.put("payments.merchantSummary", (session, id, p) -> payments.merchantSummary());
+        routes.put("payouts.request", (session, id, p) -> payments.requestPayout(read(p, PaymentController.PayoutRequestBody.class)));
+        routes.put("payouts.mine", (session, id, p) -> payments.payouts());
+
+        routes.put("twin.shop", (session, id, p) -> twins.shop(uuid(p, "storeId")));
+        routes.put("twin.me", (session, id, p) -> twins.me());
+        routes.put("twin.simulate", (session, id, p) -> twins.simulate(read(p, TwinViews.SimulationRequest.class)));
 
         routes.put("ai.status", (session, id, p) -> ai.status());
         routes.put("ai.chat", (session, id, p) -> {

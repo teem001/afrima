@@ -22,6 +22,7 @@ import org.mockito.quality.Strictness;
 
 import com.afrismart.inventory.InventoryService;
 import com.afrismart.inventory.ReservedStock;
+import com.afrismart.payments.PaymentService;
 import com.afrismart.shared.api.ApiException;
 import com.afrismart.shared.security.AuthUser;
 import com.afrismart.shared.security.Role;
@@ -38,12 +39,16 @@ class OrderServiceTest {
     private InventoryService inventoryService;
     @Mock
     private StoreService storeService;
+    @Mock
+    private PaymentService payments;
+    @Mock
+    private AnchorService anchors;
 
     private OrderService orderService;
 
     @BeforeEach
     void setUp() {
-        orderService = new OrderService(orders, inventoryService, storeService, event -> { });
+        orderService = new OrderService(orders, inventoryService, storeService, event -> { }, payments, anchors);
         when(orders.save(any(CustomerOrder.class))).thenAnswer(invocation -> {
             CustomerOrder order = invocation.getArgument(0);
             if (order.getId() == null) {

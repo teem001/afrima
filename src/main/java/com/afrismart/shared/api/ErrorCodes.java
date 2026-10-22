@@ -10,6 +10,7 @@ public final class ErrorCodes {
     public static final String SKU_TAKEN = "SKU_TAKEN";
     public static final String FORBIDDEN_STORE = "FORBIDDEN_STORE";
     public static final String INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK";
+    public static final String INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS";
     public static final String ORDER_NOT_FOUND = "ORDER_NOT_FOUND";
     public static final String INVALID_ORDER_STATE = "INVALID_ORDER_STATE";
     public static final String EMPTY_ORDER = "EMPTY_ORDER";

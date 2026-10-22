@@ -54,7 +54,8 @@ public class SecurityConfig {
                                 antMatcher(HttpMethod.GET, "/api/v1/search"),
                                 antMatcher(HttpMethod.GET, "/api/v1/catalog/**"),
                                 antMatcher(HttpMethod.GET, "/api/v1/stores/**"),
-                                antMatcher(HttpMethod.GET, "/api/v1/ai/status")
+                                antMatcher(HttpMethod.GET, "/api/v1/ai/status"),
+                                antMatcher(HttpMethod.GET, "/api/v1/verify/**")
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

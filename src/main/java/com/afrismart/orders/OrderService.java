@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.afrismart.inventory.InventoryService;
 import com.afrismart.inventory.ReservedStock;
+import com.afrismart.payments.PaymentService;
 import com.afrismart.shared.api.ApiException;
 import com.afrismart.shared.api.ErrorCodes;
 import com.afrismart.shared.security.AuthUser;
@@ -26,17 +27,23 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final StoreService storeService;
     private final ApplicationEventPublisher events;
+    private final PaymentService payments;
+    private final AnchorService anchors;
 
     public OrderService(
             CustomerOrderRepository orders,
             InventoryService inventoryService,
             StoreService storeService,
-            ApplicationEventPublisher events
+            ApplicationEventPublisher events,
+            PaymentService payments,
+            AnchorService anchors
     ) {
         this.orders = orders;
         this.inventoryService = inventoryService;
         this.storeService = storeService;
         this.events = events;
+        this.payments = payments;
+        this.anchors = anchors;
     }
 
     @Transactional
@@ -81,8 +88,44 @@ public class OrderService {
                         .map(line -> new LedgerHasher.Line(line.getProductId(), line.getQuantity(), line.getUnitPriceKobo()))
                         .toList()
         ));
+        // Pay from the consumer wallet into escrow; insufficient funds roll the whole order (incl. stock) back.
+        payments.hold(consumer.id(), store.getMerchantId(), store.getId(), order.getId(), order.getTotalKobo());
         OrderResponse response = OrderResponse.from(order);
         events.publishEvent(new OrderEvent(OrderEvent.Kind.PLACED, response));
+        return response;
+    }
+
+    /** Merchant marks the order handed over: escrow releases (minus commission) and the hash is anchored. */
+    @Transactional
+    public OrderResponse fulfil(AuthUser merchant, UUID orderId) {
+        CustomerOrder order = requireVisibleToMerchant(merchant, orderId);
+        if (order.getStatus() != OrderStatus.ACCEPTED) {
+            throw ApiException.conflict(ErrorCodes.INVALID_ORDER_STATE, "Only accepted orders can be fulfilled");
+        }
+        order.setStatus(OrderStatus.FULFILLED);
+        payments.release(orderId);
+        anchors.anchorOrder(order);
+        OrderResponse response = OrderResponse.from(order);
+        events.publishEvent(new OrderEvent(OrderEvent.Kind.STATUS_CHANGED, response));
+        return response;
+    }
+
+    /** Consumer or owning merchant cancels before fulfilment: stock is restored and escrow refunded. */
+    @Transactional
+    public OrderResponse cancel(AuthUser user, UUID orderId) {
+        CustomerOrder order = orders.findById(orderId)
+                .orElseThrow(() -> ApiException.notFound(ErrorCodes.ORDER_NOT_FOUND, "Order not found"));
+        assertCanView(user, order);
+        if (order.getStatus() == OrderStatus.FULFILLED || order.getStatus() == OrderStatus.CANCELLED) {
+            throw ApiException.conflict(ErrorCodes.INVALID_ORDER_STATE, "This order can no longer be cancelled");
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+        inventoryService.restore(order.getStoreId(), order.getLines().stream()
+                .map(line -> new InventoryService.OrderLineRequest(line.getProductId(), line.getQuantity()))
+                .toList());
+        payments.refund(orderId);
+        OrderResponse response = OrderResponse.from(order);
+        events.publishEvent(new OrderEvent(OrderEvent.Kind.STATUS_CHANGED, response));
         return response;
     }
 

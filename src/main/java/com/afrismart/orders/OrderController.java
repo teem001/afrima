@@ -22,9 +22,11 @@ import jakarta.validation.Valid;
 public class OrderController {
 
     private final OrderService orderService;
+    private final AnchorService anchorService;
 
-    public OrderController(OrderService orderService) {
+    public OrderController(OrderService orderService, AnchorService anchorService) {
         this.orderService = orderService;
+        this.anchorService = anchorService;
     }
 
     @PostMapping("/orders")
@@ -49,6 +51,29 @@ public class OrderController {
     @PreAuthorize("hasRole('MERCHANT')")
     public OrderResponse accept(@PathVariable UUID orderId) {
         return orderService.accept(AuthUser.require(), orderId);
+    }
+
+    @PostMapping("/orders/{orderId}/fulfil")
+    @PreAuthorize("hasRole('MERCHANT')")
+    public OrderResponse fulfil(@PathVariable UUID orderId) {
+        return orderService.fulfil(AuthUser.require(), orderId);
+    }
+
+    @PostMapping("/orders/{orderId}/cancel")
+    public OrderResponse cancel(@PathVariable UUID orderId) {
+        return orderService.cancel(AuthUser.require(), orderId);
+    }
+
+    /** Public receipt verification: recompute the order hash and check its Merkle anchor. */
+    @GetMapping("/verify/{orderId}")
+    public AnchorService.VerifyView verify(@PathVariable UUID orderId) {
+        return anchorService.verify(orderId);
+    }
+
+    @PostMapping("/anchors/pending")
+    @PreAuthorize("hasRole('MERCHANT')")
+    public AnchorService.AnchorView anchorPending() {
+        return anchorService.anchorPending();
     }
 
     @GetMapping("/merchant/orders")
