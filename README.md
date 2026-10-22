@@ -25,6 +25,18 @@ If a migration changes and the file database refuses to start (Flyway checksum m
 
 Any JDBC URL can be supplied with `AFRISMART_DB_URL`. Use `SERVER_PORT` to change the port.
 
+## Deploy to Vercel (Container Runtime, Beta)
+
+Vercel has no JVM runtime, but its [Container Runtime](https://vercel.com/docs/functions/runtimes/container) runs any OCI image from a `Dockerfile.vercel` — that's included here (multi-stage Maven build, `PORT` is respected).
+
+1. [vercel.com/new](https://vercel.com/new) → import `teem001/afrima` (no framework preset needed; `Dockerfile.vercel` is auto-detected).
+2. Set environment variables:
+   - `OPENAI_API_KEY` — enables the AI assistant (optional)
+   - `AFRISMART_JWT_SECRET` — a long random string (recommended; otherwise the local dev default is used)
+3. Deploy. Your API/WebSocket base will be `https://<project>.vercel.app` and `wss://<project>.vercel.app/ws`.
+
+**Demo caveats on Vercel:** the container scales to zero after ~5 min idle (cold start on the next request), a WebSocket connection is pinned to one Function instance (max connection duration follows your plan's Function limits — the web client reconnects and re-authenticates automatically), and the in-memory H2 database is per-instance and reseeded on restart, so orders/registrations don't survive a scale-down. For production data, set `AFRISMART_DB_URL` to an external Postgres and expect to move realtime fan-out to a shared store. The included `Dockerfile` targets the same image on Render/Railway/Fly without these limits.
+
 ## Demo accounts
 
 Password for all: `Password123!`

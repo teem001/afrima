@@ -1,0 +1,13 @@
+.git
+.idea
+target
+web
+docs
+data
+*.docx
+*.log
+.DS_Store
+.env
+.env.local
+Dockerfile
+README.md
