@@ -23,6 +23,7 @@ import com.afrismart.inventory.UpsertInventoryRequest;
 import com.afrismart.payments.PaymentService;
 import com.afrismart.shared.security.AuthUser;
 import com.afrismart.shared.security.Role;
+import com.afrismart.stores.StoreRepository;
 import com.afrismart.stores.StoreResponse;
 import com.afrismart.stores.StoreService;
 import com.afrismart.stores.UpsertStoreRequest;
@@ -36,6 +37,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DemoDataSeeder.class);
 
     private final UserAccountRepository users;
+    private final StoreRepository stores;
     private final AuthService authService;
     private final CatalogService catalogService;
     private final StoreService storeService;
@@ -44,6 +46,7 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     public DemoDataSeeder(
             UserAccountRepository users,
+            StoreRepository stores,
             AuthService authService,
             CatalogService catalogService,
             StoreService storeService,
@@ -51,6 +54,7 @@ public class DemoDataSeeder implements ApplicationRunner {
             PaymentService payments
     ) {
         this.users = users;
+        this.stores = stores;
         this.authService = authService;
         this.catalogService = catalogService;
         this.storeService = storeService;
@@ -61,21 +65,23 @@ public class DemoDataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (users.count() > 0) {
+        // Always ensure the six concurrent demo logins exist (warm file-H2 may predate multi-account seed).
+        ensureUser("ada@afrismart.ng", "Ada Okonkwo", "08030000001", Role.CONSUMER, true);
+        ensureUser("chioma@afrismart.ng", "Chioma Eze", "08030000005", Role.CONSUMER, true);
+        ensureUser("tunde@afrismart.ng", "Tunde Bakare", "08030000006", Role.CONSUMER, true);
+        UserResponse yabaMerchant = ensureUser("yaba@afrismart.ng", "Yaba Campus Mart", "08030000002", Role.MERCHANT, false);
+        UserResponse surulereMerchant = ensureUser("surulere@afrismart.ng", "Surulere Stationers", "08030000003", Role.MERCHANT, false);
+        UserResponse ikejaMerchant = ensureUser("ikeja@afrismart.ng", "Ikeja CV Mart", "08030000004", Role.MERCHANT, false);
+
+        if (stores.count() > 0) {
+            log.info(
+                    "Demo logins ready (password {}): ada/chioma/tunde + yaba/surulere/ikeja @afrismart.ng",
+                    DEMO_PASSWORD
+            );
             return;
         }
-        log.info("Seeding AfriSmart demo data (multiple consumers + merchants for concurrent demos)");
 
-        UserResponse ada = register("ada@afrismart.ng", "Ada Okonkwo", "08030000001", Role.CONSUMER);
-        UserResponse chioma = register("chioma@afrismart.ng", "Chioma Eze", "08030000005", Role.CONSUMER);
-        UserResponse tunde = register("tunde@afrismart.ng", "Tunde Bakare", "08030000006", Role.CONSUMER);
-        UserResponse yabaMerchant = register("yaba@afrismart.ng", "Yaba Campus Mart", "08030000002", Role.MERCHANT);
-        UserResponse surulereMerchant = register("surulere@afrismart.ng", "Surulere Stationers", "08030000003", Role.MERCHANT);
-        UserResponse ikejaMerchant = register("ikeja@afrismart.ng", "Ikeja CV Mart", "08030000004", Role.MERCHANT);
-
-        fund(ada);
-        fund(chioma);
-        fund(tunde);
+        log.info("Seeding AfriSmart demo catalog and shops for concurrent demos");
 
         ProductResponse pens = catalogService.create(new CreateProductRequest(
                 "PEN-PACK-10",
@@ -174,12 +180,20 @@ public class DemoDataSeeder implements ApplicationRunner {
         );
     }
 
-    private UserResponse register(String email, String name, String phone, Role role) {
-        return authService.register(new RegisterRequest(email, DEMO_PASSWORD, name, phone, role)).user();
-    }
-
-    private void fund(UserResponse user) {
-        payments.fundDemo(new AuthUser(user.id(), user.email(), user.role()), DEMO_WALLET_KOBO);
+    /** Returns the user; creates + optionally funds when the email is new. */
+    private UserResponse ensureUser(String email, String name, String phone, Role role, boolean fundIfNew) {
+        return users.findByEmailIgnoreCase(email)
+                .map(UserResponse::from)
+                .orElseGet(() -> {
+                    UserResponse created = authService.register(
+                            new RegisterRequest(email, DEMO_PASSWORD, name, phone, role)
+                    ).user();
+                    if (fundIfNew) {
+                        payments.fundDemo(new AuthUser(created.id(), created.email(), created.role()), DEMO_WALLET_KOBO);
+                    }
+                    log.info("Added demo account {}", email);
+                    return created;
+                });
     }
 
     private AuthUser merchant(UserResponse user) {
