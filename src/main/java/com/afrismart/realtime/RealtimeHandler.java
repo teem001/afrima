@@ -25,9 +25,10 @@ import jakarta.annotation.PreDestroy;
 class RealtimeHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(RealtimeHandler.class);
-    private static final int SEND_TIME_LIMIT_MS = 10_000;
-    private static final int SEND_BUFFER_LIMIT_BYTES = 2 * 1024 * 1024;
-    private static final int TEXT_MESSAGE_LIMIT_BYTES = 64 * 1024;
+    private static final int SEND_TIME_LIMIT_MS = 30_000;
+    /** Large enough for compressed shop/product media (base64 JSON can be several MB). */
+    private static final int SEND_BUFFER_LIMIT_BYTES = 8 * 1024 * 1024;
+    private static final int TEXT_MESSAGE_LIMIT_BYTES = 8 * 1024 * 1024;
 
     private final SessionRegistry sessions;
     private final RealtimeRouter router;

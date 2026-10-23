@@ -29,7 +29,7 @@ import com.afrismart.shared.security.AuthUser;
 public class MediaService {
 
     public static final int MAX_IMAGE_BYTES = 800_000;
-    public static final int MAX_VIDEO_BYTES = 3_500_000;
+    public static final int MAX_VIDEO_BYTES = 2_500_000;
     private static final int MAX_IMAGE_EDGE = 1280;
     private static final float JPEG_QUALITY = 0.72f;
 
@@ -117,13 +117,17 @@ public class MediaService {
         }
 
         if (image) {
-            bytes = recompressImage(bytes, contentType);
-            contentType = "image/jpeg";
+            // Client already JPEG-compresses; skip AWT recompress when under the cap to avoid OOM on tiny Vercel instances.
+            if (!("image/jpeg".equals(contentType) && bytes.length <= MAX_IMAGE_BYTES)
+                    && !("image/gif".equals(contentType) && bytes.length <= MAX_IMAGE_BYTES)) {
+                bytes = recompressImage(bytes, contentType);
+                contentType = "image/jpeg";
+            }
             if (bytes.length > MAX_IMAGE_BYTES) {
                 throw ApiException.badRequest(ErrorCodes.VALIDATION_FAILED, "Image must be under 800 KB after compression");
             }
         } else if (bytes.length > MAX_VIDEO_BYTES) {
-            throw ApiException.badRequest(ErrorCodes.VALIDATION_FAILED, "Video must be under 3.5 MB after compression");
+            throw ApiException.badRequest(ErrorCodes.VALIDATION_FAILED, "Video must be under 2.5 MB after compression");
         }
 
         return new ParsedMedia(contentType, bytes);

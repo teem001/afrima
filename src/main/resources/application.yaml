@@ -23,6 +23,11 @@ spring:
 
 server:
   port: ${PORT:${SERVER_PORT:8087}}
+  tomcat:
+    # Media uploads arrive as JSON base64; default 2MB post limit drops/crashes large photos & videos.
+    max-http-form-post-size: 10MB
+    max-swallow-size: 10MB
+  max-http-request-header-size: 16KB
 
 management:
   endpoints:
