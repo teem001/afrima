@@ -90,7 +90,9 @@ public class CatalogService {
             slug = "ITEM";
         }
         for (int attempt = 0; attempt < 8; attempt++) {
-            String candidate = slug + "-" + Integer.toHexString(ThreadLocalRandom.current().nextInt(0x100000, 0xFFFFF));
+            // nextInt origin must be < bound (was inverted and crashed blank-SKU creates)
+            String candidate = slug + "-"
+                    + Integer.toHexString(ThreadLocalRandom.current().nextInt(0x10000, 0x100000)).toUpperCase(Locale.ROOT);
             if (!products.existsBySkuIgnoreCase(candidate)) {
                 return candidate;
             }
