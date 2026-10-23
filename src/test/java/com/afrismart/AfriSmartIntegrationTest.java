@@ -27,7 +27,10 @@ import com.afrismart.ai.engine.ToolCall;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-@SpringBootTest(properties = "afrismart.ai.openai.api-key=")
+@SpringBootTest(properties = {
+        "afrismart.ai.openai.api-key=",
+        "afrismart.demo.seed=true"
+})
 @AutoConfigureMockMvc
 class AfriSmartIntegrationTest {
 

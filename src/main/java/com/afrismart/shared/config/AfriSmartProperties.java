@@ -11,6 +11,7 @@ public class AfriSmartProperties {
     private final Jwt jwt = new Jwt();
     private final Search search = new Search();
     private final Clock clock = new Clock();
+    private final Demo demo = new Demo();
 
     public Jwt getJwt() {
         return jwt;
@@ -22,6 +23,23 @@ public class AfriSmartProperties {
 
     public Clock getClock() {
         return clock;
+    }
+
+    public Demo getDemo() {
+        return demo;
+    }
+
+    public static class Demo {
+        /** When true, seed a few accounts + sample shops (tests only). Live demos start empty. */
+        private boolean seed = false;
+
+        public boolean isSeed() {
+            return seed;
+        }
+
+        public void setSeed(boolean seed) {
+            this.seed = seed;
+        }
     }
 
     public static class Jwt {

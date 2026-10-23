@@ -54,6 +54,9 @@ afrismart:
     max-results: 50
   clock:
     zone: Africa/Lagos
+  # Live: empty DB — people register and create their own shops/products. Tests set seed=true.
+  demo:
+    seed: ${AFRISMART_DEMO_SEED:false}
   ai:
     engine: ${AFRISMART_AI_ENGINE:OPENAI}
     max-tool-rounds: 6

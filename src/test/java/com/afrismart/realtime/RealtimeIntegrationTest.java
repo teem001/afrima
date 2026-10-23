@@ -36,6 +36,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "afrismart.ai.openai.api-key=",
+                "afrismart.demo.seed=true",
                 "spring.datasource.url=jdbc:h2:mem:afrismart-realtime;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
         }
 )

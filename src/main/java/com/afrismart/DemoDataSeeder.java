@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,8 +29,10 @@ import com.afrismart.stores.StoreResponse;
 import com.afrismart.stores.StoreService;
 import com.afrismart.stores.UpsertStoreRequest;
 
+/** Optional sample data for automated tests. Disabled on live so demos start from scratch. */
 @Component
 @Order(1)
+@ConditionalOnProperty(prefix = "afrismart.demo", name = "seed", havingValue = "true")
 public class DemoDataSeeder implements ApplicationRunner {
 
     public static final String DEMO_PASSWORD = "Password123!";
@@ -65,7 +68,11 @@ public class DemoDataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        // Always ensure the six concurrent demo logins exist (warm file-H2 may predate multi-account seed).
+        if (users.count() > 0) {
+            return;
+        }
+        log.info("Seeding AfriSmart test fixture data (afrismart.demo.seed=true)");
+
         ensureUser("ada@afrismart.ng", "Ada Okonkwo", "08030000001", Role.CONSUMER, true);
         ensureUser("chioma@afrismart.ng", "Chioma Eze", "08030000005", Role.CONSUMER, true);
         ensureUser("tunde@afrismart.ng", "Tunde Bakare", "08030000006", Role.CONSUMER, true);
@@ -74,14 +81,8 @@ public class DemoDataSeeder implements ApplicationRunner {
         UserResponse ikejaMerchant = ensureUser("ikeja@afrismart.ng", "Ikeja CV Mart", "08030000004", Role.MERCHANT, false);
 
         if (stores.count() > 0) {
-            log.info(
-                    "Demo logins ready (password {}): ada/chioma/tunde + yaba/surulere/ikeja @afrismart.ng",
-                    DEMO_PASSWORD
-            );
             return;
         }
-
-        log.info("Seeding AfriSmart demo catalog and shops for concurrent demos");
 
         ProductResponse pens = catalogService.create(new CreateProductRequest(
                 "PEN-PACK-10",
