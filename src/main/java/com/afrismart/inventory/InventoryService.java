@@ -55,6 +55,36 @@ public class InventoryService {
         return InventoryItemResponse.from(item);
     }
 
+    /** Adds units to whatever is already on the shelf (for low / out-of-stock restocks). */
+    @Transactional
+    public InventoryItemResponse restock(AuthUser merchant, UUID storeId, RestockRequest request) {
+        storeService.requireOwned(storeId, merchant.id());
+        catalogService.require(request.productId());
+        InventoryItem item = items.findByStoreIdAndProductId(storeId, request.productId())
+                .orElseGet(() -> {
+                    InventoryItem created = new InventoryItem();
+                    created.setStoreId(storeId);
+                    created.setProductId(request.productId());
+                    created.setCurrency(Money.NGN);
+                    created.setQuantity(0);
+                    created.setUnitPriceKobo(0);
+                    return created;
+                });
+        long nextQty = (long) item.getQuantity() + request.addQuantity();
+        if (nextQty > Integer.MAX_VALUE) {
+            throw ApiException.badRequest(ErrorCodes.VALIDATION_FAILED, "Restock quantity is too large");
+        }
+        item.setQuantity((int) nextQty);
+        if (request.unitPriceKobo() != null) {
+            item.setUnitPriceKobo(request.unitPriceKobo());
+        } else if (item.getUnitPriceKobo() <= 0) {
+            throw ApiException.badRequest(ErrorCodes.VALIDATION_FAILED, "Set a unit price before restocking a new product");
+        }
+        items.save(item);
+        publishStockChanged(item);
+        return InventoryItemResponse.from(item);
+    }
+
     @Transactional(readOnly = true)
     public List<InventoryItemResponse> listByStore(UUID storeId) {
         storeService.require(storeId);

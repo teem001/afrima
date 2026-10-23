@@ -15,8 +15,8 @@ public class OfferRepository {
 
     private static final String BASE = """
             select new com.afrismart.marketplace.OfferRow(
-                s.id, s.name, s.address, s.latitude, s.longitude, s.openAt, s.closeAt,
-                p.id, p.sku, p.name, i.quantity, i.unitPriceKobo, i.currency)
+                s.id, s.name, s.address, s.latitude, s.longitude, s.openAt, s.closeAt, s.imageMediaId,
+                p.id, p.sku, p.name, p.imageMediaId, i.quantity, i.unitPriceKobo, i.currency)
             from Store s, InventoryItem i, Product p
             where i.storeId = s.id
               and p.id = i.productId

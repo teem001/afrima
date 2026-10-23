@@ -61,13 +61,19 @@ public class TwinService {
         List<TwinViews.StockTwin> stock = stockTwins(storeId);
         List<TwinViews.Suggestion> suggestions = new ArrayList<>();
         for (TwinViews.StockTwin item : stock) {
-            if (item.lowStock()) {
-                long restock = Math.max(10, Math.round(item.velocityPerDay() * 14) - item.quantity());
-                String when = item.daysToStockout() == null
+            if (item.lowStock() || item.quantity() == 0) {
+                int suggested = (int) Math.max(10, Math.round(item.velocityPerDay() * 14) - item.quantity());
+                String when = item.quantity() == 0
+                        ? " — out of stock"
+                        : item.daysToStockout() == null
                         ? ""
                         : String.format(" (about %.0f day(s) of stock left)", Math.floor(item.daysToStockout()));
-                suggestions.add(new TwinViews.Suggestion("RESTOCK",
-                        "Restock " + restock + " × " + item.productName() + when + " — suggestion only, nothing changed."));
+                suggestions.add(new TwinViews.Suggestion(
+                        "RESTOCK",
+                        "Add " + suggested + " × " + item.productName() + when + ". Tap Restock to put them on the shelf.",
+                        item.productId(),
+                        suggested
+                ));
             }
         }
         PaymentViews.MerchantSummary money = payments.merchantSummary(merchant);
@@ -81,7 +87,8 @@ public class TwinService {
         }
         var storeView = storeService.get(storeId);
         return new TwinViews.ShopTwin(
-                store.getId(), store.getName(), store.getAddress(), storeView.openNow(), stock, suggestions, money);
+                store.getId(), store.getName(), store.getAddress(), storeView.openNow(), storeView.imageUrl(),
+                stock, suggestions, money);
     }
 
     @Transactional
@@ -137,7 +144,10 @@ public class TwinService {
             Double days = velocity > 0 ? round2(item.quantity() / velocity) : null;
             boolean low = item.quantity() <= LOW_STOCK_THRESHOLD || (days != null && days < 7);
             return new TwinViews.StockTwin(
-                    item.productId(), product == null ? "Unknown product" : product.name(), product == null ? "" : product.sku(),
+                    item.productId(),
+                    product == null ? "Unknown product" : product.name(),
+                    product == null ? "" : product.sku(),
+                    product == null ? null : product.imageUrl(),
                     item.quantity(), item.unitPriceKobo(), Money.formatNaira(item.unitPriceKobo()),
                     sold7d, round2(velocity), days, low);
         }).toList();

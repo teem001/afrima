@@ -18,6 +18,9 @@ public record UpsertStoreRequest(
         @DecimalMin("-180") @DecimalMax("180") double longitude,
         @NotNull LocalTime openAt,
         @NotNull LocalTime closeAt,
-        @Min(100) Integer deliveryRadiusM
+        @Min(100) Integer deliveryRadiusM,
+        UUID imageMediaId,
+        @Size(max = 32) String phone,
+        @Size(max = 128) String category
 ) {
 }

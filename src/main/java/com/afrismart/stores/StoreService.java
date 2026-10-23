@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.afrismart.shared.api.ApiException;
 import com.afrismart.shared.api.ErrorCodes;
 import com.afrismart.shared.config.AfriSmartProperties;
+import com.afrismart.shared.media.MediaService;
 import com.afrismart.shared.security.AuthUser;
 import com.afrismart.shared.security.Role;
 
@@ -18,10 +19,12 @@ public class StoreService {
 
     private final StoreRepository stores;
     private final AfriSmartProperties properties;
+    private final MediaService media;
 
-    public StoreService(StoreRepository stores, AfriSmartProperties properties) {
+    public StoreService(StoreRepository stores, AfriSmartProperties properties, MediaService media) {
         this.stores = stores;
         this.properties = properties;
+        this.media = media;
     }
 
     @Transactional
@@ -88,7 +91,8 @@ public class StoreService {
 
     private void apply(Store store, UpsertStoreRequest request) {
         store.setName(request.name().trim());
-        store.setDescription(request.description());
+        store.setDescription(request.description() == null || request.description().isBlank()
+                ? null : request.description().trim());
         store.setAddress(request.address().trim());
         store.setLatitude(request.latitude());
         store.setLongitude(request.longitude());
@@ -96,10 +100,23 @@ public class StoreService {
         store.setCloseAt(request.closeAt());
         store.setDeliveryRadiusM(request.deliveryRadiusM() == null ? 5000 : request.deliveryRadiusM());
         store.setActive(true);
+        if (request.imageMediaId() != null) {
+            media.require(request.imageMediaId());
+        }
+        store.setImageMediaId(request.imageMediaId());
+        store.setPhone(blankToNull(request.phone()));
+        store.setCategory(blankToNull(request.category()));
     }
 
     private StoreResponse toResponse(Store store) {
-        return StoreResponse.from(store, isOpenNow(store));
+        return StoreResponse.from(store, isOpenNow(store), media.urlFor(store.getImageMediaId()));
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private void requireMerchant(AuthUser user) {

@@ -12,6 +12,7 @@ import com.afrismart.shared.api.ApiException;
 import com.afrismart.shared.api.ErrorCodes;
 import com.afrismart.shared.config.AfriSmartProperties;
 import com.afrismart.shared.geo.GeoUtils;
+import com.afrismart.shared.media.MediaService;
 import com.afrismart.shared.money.Money;
 import com.afrismart.stores.StoreHours;
 
@@ -23,10 +24,12 @@ public class SearchService {
 
     private final OfferRepository offers;
     private final AfriSmartProperties properties;
+    private final MediaService media;
 
-    public SearchService(OfferRepository offers, AfriSmartProperties properties) {
+    public SearchService(OfferRepository offers, AfriSmartProperties properties, MediaService media) {
         this.offers = offers;
         this.properties = properties;
+        this.media = media;
     }
 
     @Transactional(readOnly = true)
@@ -85,9 +88,11 @@ public class SearchService {
                 row.latitude(),
                 row.longitude(),
                 StoreHours.isOpen(row.openAt(), row.closeAt(), now),
+                media.urlFor(row.storeImageMediaId()),
                 row.productId(),
                 row.sku(),
                 row.productName(),
+                media.urlFor(row.productImageMediaId()),
                 row.quantity(),
                 row.unitPriceKobo(),
                 Money.formatNaira(row.unitPriceKobo()),

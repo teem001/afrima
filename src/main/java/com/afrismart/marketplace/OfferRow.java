@@ -11,9 +11,11 @@ public record OfferRow(
         Double longitude,
         LocalTime openAt,
         LocalTime closeAt,
+        UUID storeImageMediaId,
         UUID productId,
         String sku,
         String productName,
+        UUID productImageMediaId,
         Integer quantity,
         Long unitPriceKobo,
         String currency

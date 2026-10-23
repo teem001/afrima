@@ -21,11 +21,13 @@ import com.afrismart.ai.AiChatRequest;
 import com.afrismart.ai.AiController;
 import com.afrismart.ai.AiProgressListener;
 import com.afrismart.catalog.CatalogController;
+import com.afrismart.catalog.CreateProductRequest;
 import com.afrismart.identity.AuthController;
 import com.afrismart.identity.AuthResponse;
 import com.afrismart.identity.LoginRequest;
 import com.afrismart.identity.RegisterRequest;
 import com.afrismart.inventory.InventoryController;
+import com.afrismart.inventory.RestockRequest;
 import com.afrismart.inventory.UpsertInventoryRequest;
 import com.afrismart.marketplace.SearchController;
 import com.afrismart.orders.OrderController;
@@ -36,9 +38,12 @@ import com.afrismart.twins.TwinViews;
 import com.afrismart.shared.api.ApiException;
 import com.afrismart.shared.api.ErrorCodes;
 import com.afrismart.shared.api.ErrorResponse;
+import com.afrismart.shared.media.MediaController;
+import com.afrismart.shared.media.MediaViews;
 import com.afrismart.shared.security.AuthUser;
 import com.afrismart.shared.security.JwtService;
 import com.afrismart.stores.StoreController;
+import com.afrismart.stores.UpsertStoreRequest;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -106,6 +111,7 @@ class RealtimeRouter {
             OrderController orders,
             PaymentController payments,
             TwinController twins,
+            MediaController media,
             AiController ai,
             AiAgentService agent,
             JwtService jwtService,
@@ -140,12 +146,19 @@ class RealtimeRouter {
             return search.search(params.q().trim(), params.lat(), params.lng(), params.radiusMeters());
         });
         routes.put("catalog.products", (session, id, p) -> catalog.list());
+        routes.put("catalog.products.create", (session, id, p) -> catalog.create(read(p, CreateProductRequest.class)));
         routes.put("stores.list", (session, id, p) -> stores.list());
         routes.put("stores.mine", (session, id, p) -> stores.mine());
         routes.put("stores.get", (session, id, p) -> stores.get(uuid(p, "storeId")));
+        routes.put("stores.create", (session, id, p) -> stores.create(read(p, UpsertStoreRequest.class)));
+        routes.put("stores.update", (session, id, p) ->
+                stores.update(uuid(p, "storeId"), read(p, UpsertStoreRequest.class)));
         routes.put("inventory.list", (session, id, p) -> inventory.list(uuid(p, "storeId")));
         routes.put("inventory.upsert", (session, id, p) ->
                 inventory.upsert(uuid(p, "storeId"), read(p, UpsertInventoryRequest.class)));
+        routes.put("inventory.restock", (session, id, p) ->
+                inventory.restock(uuid(p, "storeId"), read(p, RestockRequest.class)));
+        routes.put("media.upload", (session, id, p) -> media.upload(read(p, MediaViews.UploadRequest.class)));
 
         routes.put("orders.place", (session, id, p) -> orders.place(read(p, PlaceOrderRequest.class)));
         routes.put("orders.mine", (session, id, p) -> orders.mine());

@@ -7,6 +7,7 @@ public final class ErrorCodes {
     public static final String VALIDATION_FAILED = "VALIDATION_FAILED";
     public static final String STORE_NOT_FOUND = "STORE_NOT_FOUND";
     public static final String PRODUCT_NOT_FOUND = "PRODUCT_NOT_FOUND";
+    public static final String MEDIA_NOT_FOUND = "MEDIA_NOT_FOUND";
     public static final String SKU_TAKEN = "SKU_TAKEN";
     public static final String FORBIDDEN_STORE = "FORBIDDEN_STORE";
     public static final String INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK";

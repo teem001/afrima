@@ -15,10 +15,14 @@ public record StoreResponse(
         LocalTime closeAt,
         int deliveryRadiusM,
         boolean active,
-        boolean openNow
+        boolean openNow,
+        UUID imageMediaId,
+        String imageUrl,
+        String phone,
+        String category
 ) {
 
-    public static StoreResponse from(Store store, boolean openNow) {
+    public static StoreResponse from(Store store, boolean openNow, String imageUrl) {
         return new StoreResponse(
                 store.getId(),
                 store.getMerchantId(),
@@ -31,7 +35,11 @@ public record StoreResponse(
                 store.getCloseAt(),
                 store.getDeliveryRadiusM(),
                 store.isActive(),
-                openNow
+                openNow,
+                store.getImageMediaId(),
+                imageUrl,
+                store.getPhone(),
+                store.getCategory()
         );
     }
 }

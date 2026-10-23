@@ -12,17 +12,20 @@ public final class TwinViews {
     }
 
     public record StockTwin(
-            UUID productId, String productName, String sku, int quantity,
+            UUID productId, String productName, String sku, String imageUrl, int quantity,
             long unitPriceKobo, String unitPrice,
             long unitsSold7d, double velocityPerDay, Double daysToStockout, boolean lowStock
     ) {
     }
 
-    public record Suggestion(String type, String message) {
+    public record Suggestion(String type, String message, UUID productId, Integer suggestedQty) {
+        public Suggestion(String type, String message) {
+            this(type, message, null, null);
+        }
     }
 
     public record ShopTwin(
-            UUID storeId, String storeName, String address, boolean openNow,
+            UUID storeId, String storeName, String address, boolean openNow, String imageUrl,
             List<StockTwin> stock, List<Suggestion> suggestions,
             PaymentViews.MerchantSummary money
     ) {

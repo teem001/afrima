@@ -70,25 +70,29 @@ public class DemoDataSeeder implements ApplicationRunner {
                 "PEN-PACK-10",
                 "Pack of 10 ballpoint pens",
                 "A pack of ten blue ballpoint pens",
-                List.of("pack of pens", "biro", "biros", "pens", "pen pack")
+                List.of("pack of pens", "biro", "biros", "pens", "pen pack"),
+                null
         ));
         ProductResponse rice = catalogService.create(new CreateProductRequest(
                 "RICE-50KG",
                 "50kg bag of rice",
                 "Staple 50kg rice bag",
-                List.of("rice", "bag of rice")
+                List.of("rice", "bag of rice"),
+                null
         ));
         ProductResponse water = catalogService.create(new CreateProductRequest(
                 "WATER-SACHET-20",
                 "Pack of 20 sachet water",
                 "Pure water sachet pack",
-                List.of("sachet water", "pure water", "water")
+                List.of("sachet water", "pure water", "water"),
+                null
         ));
         ProductResponse books = catalogService.create(new CreateProductRequest(
                 "EXERCISE-80",
                 "80-leaf exercise book",
                 "Standard school exercise book",
-                List.of("exercise book", "notebook")
+                List.of("exercise book", "notebook"),
+                null
         ));
 
         StoreResponse yaba = storeService.create(
@@ -101,7 +105,10 @@ public class DemoDataSeeder implements ApplicationRunner {
                         3.3711,
                         LocalTime.of(8, 0),
                         LocalTime.of(20, 0),
-                        4000
+                        4000,
+                        null,
+                        "08030000002",
+                        "Campus kiosk"
                 )
         );
         StoreResponse surulere = storeService.create(
@@ -114,7 +121,10 @@ public class DemoDataSeeder implements ApplicationRunner {
                         3.3556,
                         LocalTime.of(8, 0),
                         LocalTime.of(19, 0),
-                        3500
+                        3500,
+                        null,
+                        "08030000003",
+                        "Stationery"
                 )
         );
         StoreResponse ikeja = storeService.create(
@@ -127,7 +137,10 @@ public class DemoDataSeeder implements ApplicationRunner {
                         3.3515,
                         LocalTime.of(9, 0),
                         LocalTime.of(21, 0),
-                        6000
+                        6000,
+                        null,
+                        "08030000004",
+                        "Electronics"
                 )
         );
 

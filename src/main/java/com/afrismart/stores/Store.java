@@ -42,6 +42,15 @@ public class Store extends BaseEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(name = "image_media_id")
+    private UUID imageMediaId;
+
+    @Column(length = 32)
+    private String phone;
+
+    @Column(length = 128)
+    private String category;
+
     public UUID getMerchantId() {
         return merchantId;
     }
@@ -120,5 +129,29 @@ public class Store extends BaseEntity {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public UUID getImageMediaId() {
+        return imageMediaId;
+    }
+
+    public void setImageMediaId(UUID imageMediaId) {
+        this.imageMediaId = imageMediaId;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 }
