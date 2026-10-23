@@ -20,6 +20,7 @@ import com.afrismart.identity.UserAccountRepository;
 import com.afrismart.identity.UserResponse;
 import com.afrismart.inventory.InventoryService;
 import com.afrismart.inventory.UpsertInventoryRequest;
+import com.afrismart.payments.PaymentService;
 import com.afrismart.shared.security.AuthUser;
 import com.afrismart.shared.security.Role;
 import com.afrismart.stores.StoreResponse;
@@ -31,6 +32,7 @@ import com.afrismart.stores.UpsertStoreRequest;
 public class DemoDataSeeder implements ApplicationRunner {
 
     public static final String DEMO_PASSWORD = "Password123!";
+    private static final long DEMO_WALLET_KOBO = 500_000; // ₦5,000 ready to spend
     private static final Logger log = LoggerFactory.getLogger(DemoDataSeeder.class);
 
     private final UserAccountRepository users;
@@ -38,19 +40,22 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final CatalogService catalogService;
     private final StoreService storeService;
     private final InventoryService inventoryService;
+    private final PaymentService payments;
 
     public DemoDataSeeder(
             UserAccountRepository users,
             AuthService authService,
             CatalogService catalogService,
             StoreService storeService,
-            InventoryService inventoryService
+            InventoryService inventoryService,
+            PaymentService payments
     ) {
         this.users = users;
         this.authService = authService;
         this.catalogService = catalogService;
         this.storeService = storeService;
         this.inventoryService = inventoryService;
+        this.payments = payments;
     }
 
     @Override
@@ -59,12 +64,18 @@ public class DemoDataSeeder implements ApplicationRunner {
         if (users.count() > 0) {
             return;
         }
-        log.info("Seeding AfriSmart demo data (Lagos shops + pack of pens)");
+        log.info("Seeding AfriSmart demo data (multiple consumers + merchants for concurrent demos)");
 
-        UserResponse consumer = register("ada@afrismart.ng", "Ada Okonkwo", "08030000001", Role.CONSUMER);
+        UserResponse ada = register("ada@afrismart.ng", "Ada Okonkwo", "08030000001", Role.CONSUMER);
+        UserResponse chioma = register("chioma@afrismart.ng", "Chioma Eze", "08030000005", Role.CONSUMER);
+        UserResponse tunde = register("tunde@afrismart.ng", "Tunde Bakare", "08030000006", Role.CONSUMER);
         UserResponse yabaMerchant = register("yaba@afrismart.ng", "Yaba Campus Mart", "08030000002", Role.MERCHANT);
         UserResponse surulereMerchant = register("surulere@afrismart.ng", "Surulere Stationers", "08030000003", Role.MERCHANT);
         UserResponse ikejaMerchant = register("ikeja@afrismart.ng", "Ikeja CV Mart", "08030000004", Role.MERCHANT);
+
+        fund(ada);
+        fund(chioma);
+        fund(tunde);
 
         ProductResponse pens = catalogService.create(new CreateProductRequest(
                 "PEN-PACK-10",
@@ -100,7 +111,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 new UpsertStoreRequest(
                         "Yaba Campus Mart",
                         "Kiosk beside UNILAG / Yaba market",
-                        "Yaba, Lagos",
+                        "Yaba / UNILAG",
                         6.5095,
                         3.3711,
                         LocalTime.of(8, 0),
@@ -116,7 +127,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 new UpsertStoreRequest(
                         "Surulere Stationers",
                         "Preferred stationer — currently out of pens",
-                        "Surulere, Lagos",
+                        "Surulere",
                         6.4992,
                         3.3556,
                         LocalTime.of(8, 0),
@@ -132,7 +143,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 new UpsertStoreRequest(
                         "Ikeja Computer Village Mart",
                         "Electronics and stationery stall",
-                        "Computer Village, Ikeja, Lagos",
+                        "Ikeja",
                         6.6018,
                         3.3515,
                         LocalTime.of(9, 0),
@@ -158,14 +169,17 @@ public class DemoDataSeeder implements ApplicationRunner {
         stock(ikejaMerchant, ikeja.id(), books.id(), 10, 45_000);
 
         log.info(
-                "Demo consumer {} / {} | search pack of pens near Yaba lat=6.5158 lng=3.3791",
-                consumer.email(),
+                "Demo ready (password {}): consumers ada/chioma/tunde@afrismart.ng · merchants yaba/surulere/ikeja@afrismart.ng",
                 DEMO_PASSWORD
         );
     }
 
     private UserResponse register(String email, String name, String phone, Role role) {
         return authService.register(new RegisterRequest(email, DEMO_PASSWORD, name, phone, role)).user();
+    }
+
+    private void fund(UserResponse user) {
+        payments.fundDemo(new AuthUser(user.id(), user.email(), user.role()), DEMO_WALLET_KOBO);
     }
 
     private AuthUser merchant(UserResponse user) {

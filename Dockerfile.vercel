@@ -14,4 +14,6 @@ WORKDIR /app
 COPY --from=build /app/target/afrismart-0.0.1-SNAPSHOT.jar app.jar
 # Headless avoids AWT crashes when compressing uploaded images on the server.
 ENV JAVA_TOOL_OPTIONS="-Djava.awt.headless=true"
+# File H2 so several people can sign in and demo on the same warm instance (survives requests until scale-to-zero).
+ENV AFRISMART_DB_URL="jdbc:h2:file:/tmp/afrismart-data/afrismart;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_ON_EXIT=FALSE"
 ENTRYPOINT ["java", "-jar", "app.jar"]
