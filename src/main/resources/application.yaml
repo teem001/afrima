@@ -20,9 +20,12 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  lifecycle:
+    timeout-per-shutdown-phase: ${SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE:30s}
 
 server:
   port: ${PORT:${SERVER_PORT:8087}}
+  shutdown: ${SERVER_SHUTDOWN:graceful}
   tomcat:
     # Media uploads arrive as JSON base64; default 2MB post limit drops/crashes large photos & videos.
     max-http-form-post-size: 10MB
@@ -36,7 +39,11 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always
+      # Keep health cheap so Vercel probes don't time out mid cold-start.
+      show-details: when_authorized
+  health:
+    diskspace:
+      enabled: false
 
 springdoc:
   swagger-ui:

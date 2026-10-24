@@ -12,10 +12,12 @@ RUN ./mvnw -q -DskipTests package
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/afrismart-0.0.1-SNAPSHOT.jar app.jar
-# Headless avoids AWT crashes when compressing uploaded images on the server.
-ENV JAVA_TOOL_OPTIONS="-Djava.awt.headless=true"
-# File H2 so several people can sign in and demo on the same warm instance (survives requests until scale-to-zero).
-# New path so prior seeded demo DBs are not reused; demos start empty (register from scratch).
-ENV AFRISMART_DB_URL="jdbc:h2:file:/tmp/afrismart-data/afrismart-empty;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_ON_EXIT=FALSE"
+# Headless AWT + container-aware heap. Avoid file H2: /tmp is wiped on every cold start and
+# concurrent Fluid instances each re-run Flyway on an empty schema (looks like a restart loop).
+ENV JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
+ENV AFRISMART_DB_URL="jdbc:h2:mem:afrismart;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
 ENV AFRISMART_DEMO_SEED=false
+# Fit Vercel's ~30s SIGTERM grace window.
+ENV SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE=25s
+ENV SERVER_SHUTDOWN=graceful
 ENTRYPOINT ["java", "-jar", "app.jar"]
