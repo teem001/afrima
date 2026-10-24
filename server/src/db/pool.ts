@@ -19,6 +19,10 @@ export type AppPool = DbClient & {
   connect: () => Promise<PoolClient>;
   end: () => Promise<void>;
   exec: (sql: string) => Promise<void>;
+  execTolerant: (
+    sql: string,
+    isIgnorable: (message: string) => boolean,
+  ) => Promise<void>;
 };
 
 function splitStatements(sql: string): string[] {
@@ -87,6 +91,21 @@ function wrapPgPool(pool: pg.Pool): AppPool {
       try {
         for (const stmt of splitStatements(sql)) {
           await client.query(stmt);
+        }
+      } finally {
+        client.release();
+      }
+    },
+    async execTolerant(sql: string, isIgnorable: (message: string) => boolean) {
+      const client = await pool.connect();
+      try {
+        for (const stmt of splitStatements(sql)) {
+          try {
+            await client.query(stmt);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (!isIgnorable(msg)) throw e;
+          }
         }
       } finally {
         client.release();

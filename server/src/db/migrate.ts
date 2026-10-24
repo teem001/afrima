@@ -5,6 +5,16 @@ import { pool } from "./pool.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function isIgnorableMigrationError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("already exists") ||
+    m.includes("duplicate column") ||
+    m.includes("duplicate key") ||
+    (m.includes("constraint") && m.includes("exist"))
+  );
+}
+
 /** Prefer Flyway history if present (Java deploy already migrated); else use schema_migrations. */
 export async function migrate(): Promise<void> {
   try {
@@ -22,12 +32,17 @@ export async function migrate(): Promise<void> {
     /* fresh memory DB — continue */
   }
 
-  await pool.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version TEXT PRIMARY KEY,
-      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
+  try {
+    await pool.exec(`
+      CREATE TABLE schema_migrations (
+        version TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!isIgnorableMigrationError(msg)) throw e;
+  }
 
   const dir = path.join(__dirname, "migrations");
   const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
@@ -37,7 +52,8 @@ export async function migrate(): Promise<void> {
     if (exists.rowCount) continue;
 
     const sql = await readFile(path.join(dir, file), "utf8");
-    await pool.exec(sql);
+    // Statement-by-statement so a partial prior boot can resume without aborting the version.
+    await pool.execTolerant(sql, isIgnorableMigrationError);
     await pool.query(`INSERT INTO schema_migrations (version) VALUES ($1)`, [version]);
     console.log(`Applied migration ${file}`);
   }

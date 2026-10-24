@@ -17,9 +17,11 @@ CREATE INDEX idx_media_assets_owner ON media_assets (owner_id);
 ALTER TABLE stores ADD COLUMN image_media_id UUID;
 ALTER TABLE stores ADD COLUMN phone VARCHAR(32);
 ALTER TABLE stores ADD COLUMN category VARCHAR(128);
+
 ALTER TABLE stores
     ADD CONSTRAINT fk_stores_image_media FOREIGN KEY (image_media_id) REFERENCES media_assets (id);
 
 ALTER TABLE products ADD COLUMN image_media_id UUID;
+
 ALTER TABLE products
     ADD CONSTRAINT fk_products_image_media FOREIGN KEY (image_media_id) REFERENCES media_assets (id);
