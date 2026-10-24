@@ -4,11 +4,38 @@ import { haversineMeters, isOpenNow } from "../geo.js";
 import { formatNaira } from "../money.js";
 import { mediaUrl } from "./mediaService.js";
 
-export async function search(input: { q: string; lat: number; lng: number; radiusMeters?: number }) {
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 50;
+
+export async function search(input: {
+  q: string;
+  lat: number;
+  lng: number;
+  /** When set, only offers within this radius. When omitted, any in-stock match from any store. */
+  radiusMeters?: number | null;
+  page?: number;
+  pageSize?: number;
+}) {
   const q = input.q.trim();
-  const radius = Math.min(50_000, Math.max(100, input.radiusMeters ?? config.searchDefaultRadiusM));
-  const latDelta = radius / 111_320;
-  const lngDelta = radius / (111_320 * Math.max(0.2, Math.cos((input.lat * Math.PI) / 180)));
+  const page = Math.max(1, Math.floor(Number(input.page) || 1));
+  const pageSize = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, Math.floor(Number(input.pageSize) || DEFAULT_PAGE_SIZE)),
+  );
+  const radiusRaw = input.radiusMeters;
+  const useRadius = radiusRaw != null && Number.isFinite(Number(radiusRaw)) && Number(radiusRaw) > 0;
+  const radius = useRadius
+    ? Math.min(50_000, Math.max(100, Number(radiusRaw)))
+    : null;
+
+  const params: unknown[] = [`%${q.toLowerCase()}%`];
+  let geoClause = "";
+  if (radius != null) {
+    const latDelta = radius / 111_320;
+    const lngDelta = radius / (111_320 * Math.max(0.2, Math.cos((input.lat * Math.PI) / 180)));
+    params.push(input.lat - latDelta, input.lat + latDelta, input.lng - lngDelta, input.lng + lngDelta);
+    geoClause = `AND s.latitude BETWEEN $2 AND $3 AND s.longitude BETWEEN $4 AND $5`;
+  }
 
   const res = await pool.query(
     `
@@ -21,19 +48,12 @@ export async function search(input: { q: string; lat: number; lng: number; radiu
     JOIN products p ON p.id = i.product_id
     LEFT JOIN product_aliases a ON a.product_id = p.id
     WHERE i.quantity > 0
-      AND s.latitude BETWEEN $1 AND $2
-      AND s.longitude BETWEEN $3 AND $4
+      ${geoClause}
       AND (
-        lower(p.name) LIKE $5 OR lower(p.sku) LIKE $5 OR lower(COALESCE(a.alias,'')) LIKE $5
+        lower(p.name) LIKE $1 OR lower(p.sku) LIKE $1 OR lower(COALESCE(a.alias,'')) LIKE $1
       )
     `,
-    [
-      input.lat - latDelta,
-      input.lat + latDelta,
-      input.lng - lngDelta,
-      input.lng + lngDelta,
-      `%${q.toLowerCase()}%`,
-    ],
+    params,
   );
 
   const seen = new Set<string>();
@@ -42,7 +62,7 @@ export async function search(input: { q: string; lat: number; lng: number; radiu
     const key = `${row.store_id}:${row.product_id}`;
     if (seen.has(key)) continue;
     const distanceMeters = haversineMeters(input.lat, input.lng, Number(row.latitude), Number(row.longitude));
-    if (distanceMeters > radius) continue;
+    if (radius != null && distanceMeters > radius) continue;
     seen.add(key);
     const unitPriceKobo = Number(row.unit_price_kobo);
     const openAt = String(row.open_at).slice(0, 8);
@@ -68,8 +88,14 @@ export async function search(input: { q: string; lat: number; lng: number; radiu
   }
 
   offers.sort((a, b) => a.distanceMeters - b.distanceMeters || a.unitPriceKobo - b.unitPriceKobo);
-  const limited = offers.slice(0, config.searchMaxResults);
-  const prices = limited.map((o) => o.unitPriceKobo);
+
+  const totalCount = offers.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * pageSize;
+  const pageOffers = offers.slice(start, start + pageSize);
+
+  const prices = offers.map((o) => o.unitPriceKobo);
   const minPriceKobo = prices.length ? Math.min(...prices) : null;
   const maxPriceKobo = prices.length ? Math.max(...prices) : null;
 
@@ -78,11 +104,16 @@ export async function search(input: { q: string; lat: number; lng: number; radiu
     latitude: input.lat,
     longitude: input.lng,
     radiusMeters: radius,
-    resultCount: limited.length,
+    page: safePage,
+    pageSize,
+    totalCount,
+    totalPages,
+    hasMore: safePage < totalPages,
+    resultCount: pageOffers.length,
     minPriceKobo,
     maxPriceKobo,
     minPrice: minPriceKobo == null ? null : formatNaira(minPriceKobo),
     maxPrice: maxPriceKobo == null ? null : formatNaira(maxPriceKobo),
-    offers: limited,
+    offers: pageOffers,
   };
 }
