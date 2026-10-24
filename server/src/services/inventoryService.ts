@@ -4,6 +4,7 @@ import type { DbClient } from "../db/pool.js";
 import { pool } from "../db/pool.js";
 import { ApiError } from "../errors.js";
 import { formatNaira } from "../money.js";
+import * as notifications from "./notificationService.js";
 
 async function assertStoreOwner(user: AuthUser, storeId: string) {
   if (user.role !== "MERCHANT") throw ApiError.forbidden();
@@ -50,9 +51,10 @@ export async function upsert(
     throw ApiError.badRequest("VALIDATION_FAILED", "quantity and price must be >= 0");
   }
   const existing = await pool.query(
-    `SELECT id FROM inventory_items WHERE store_id = $1 AND product_id = $2`,
+    `SELECT id, quantity FROM inventory_items WHERE store_id = $1 AND product_id = $2`,
     [storeId, input.productId],
   );
+  const previousQuantity = existing.rows[0] ? Number(existing.rows[0].quantity) : 0;
   const now = new Date();
   if (existing.rows[0]) {
     await pool.query(
@@ -70,7 +72,19 @@ export async function upsert(
     storeId,
     input.productId,
   ]);
-  return mapItem(res.rows[0]);
+  const item = mapItem(res.rows[0]);
+  if (input.quantity > 0) {
+    void notifications
+      .matchInventoryUpdate({
+        storeId,
+        productId: input.productId,
+        quantity: input.quantity,
+        unitPriceKobo: input.unitPriceKobo,
+        previousQuantity,
+      })
+      .catch(() => undefined);
+  }
+  return item;
 }
 
 export async function restock(

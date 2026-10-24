@@ -6,6 +6,7 @@ import { ApiError } from "../errors.js";
 import { formatNaira } from "../money.js";
 import * as inventory from "./inventoryService.js";
 import * as payments from "./paymentService.js";
+import * as preferences from "./preferenceService.js";
 
 type Emit = (event: string, data: unknown, targets?: { userIds?: string[]; broadcast?: boolean }) => void;
 
@@ -120,6 +121,22 @@ export async function place(
 
   const view = await loadOrder(order);
   emit("order.placed", view, { userIds: [user.id, store.rows[0].merchant_id] });
+  for (const line of view.items) {
+    void pool
+      .query(`SELECT category_id FROM products WHERE id = $1`, [line.productId])
+      .then((r) =>
+        preferences.trackEvent(user.id, {
+          type: "ORDER",
+          productId: line.productId,
+          storeId: view.storeId,
+          categoryId: (r.rows[0]?.category_id as string | null) ?? null,
+          unitPriceKobo: line.unitPriceKobo,
+          quantity: line.quantity,
+          payload: { orderId: view.id },
+        }),
+      )
+      .catch(() => undefined);
+  }
   return view;
 }
 

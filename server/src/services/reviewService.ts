@@ -2,6 +2,7 @@ import { v4 as uuid } from "uuid";
 import type { AuthUser } from "../auth/jwt.js";
 import { pool } from "../db/pool.js";
 import { ApiError } from "../errors.js";
+import * as preferences from "./preferenceService.js";
 
 function mapReview(row: {
   id: string;
@@ -94,7 +95,17 @@ export async function create(
      VALUES ($1,$2,$3,$4,$5,$6,$7,$7)`,
     [id, productId, user.id, orderId, rating, comment, now],
   );
-  return get(id);
+  const created = await get(id);
+  const cat = await pool.query(`SELECT category_id FROM products WHERE id = $1`, [productId]);
+  void preferences
+    .trackEvent(user.id, {
+      type: "REVIEW",
+      productId,
+      categoryId: (cat.rows[0]?.category_id as string | null) ?? null,
+      payload: { rating, orderId },
+    })
+    .catch(() => undefined);
+  return created;
 }
 
 export async function get(reviewId: string) {

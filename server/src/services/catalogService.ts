@@ -5,9 +5,37 @@ import { ApiError } from "../errors.js";
 import { mediaUrl } from "./mediaService.js";
 import { formatNaira } from "../money.js";
 
+const OTHER_CATEGORY_ID = "a1000000-0000-4000-8000-000000000008";
+
+export async function listCategories() {
+  const res = await pool.query(
+    `SELECT id, slug, name, parent_id FROM product_categories ORDER BY name`,
+  );
+  return res.rows.map((c) => ({
+    id: c.id as string,
+    slug: c.slug as string,
+    name: c.name as string,
+    parentId: (c.parent_id as string | null) ?? null,
+  }));
+}
+
+async function resolveCategoryId(input?: string | null) {
+  if (!input?.trim()) return OTHER_CATEGORY_ID;
+  const value = input.trim();
+  const byId = await pool.query(`SELECT id FROM product_categories WHERE id = $1`, [value]);
+  if (byId.rows[0]) return byId.rows[0].id as string;
+  const bySlug = await pool.query(`SELECT id FROM product_categories WHERE slug = $1`, [value.toLowerCase()]);
+  if (bySlug.rows[0]) return bySlug.rows[0].id as string;
+  throw ApiError.badRequest("VALIDATION_FAILED", "Unknown category");
+}
+
 export async function listProducts() {
   const products = await pool.query(
-    `SELECT id, sku, name, description, image_media_id FROM products ORDER BY name`,
+    `SELECT p.id, p.sku, p.name, p.description, p.image_media_id, p.category_id,
+            c.slug AS category_slug, c.name AS category_name
+     FROM products p
+     LEFT JOIN product_categories c ON c.id = p.category_id
+     ORDER BY p.name`,
   );
   const aliases = await pool.query(`SELECT product_id, alias FROM product_aliases`);
   const byProduct = new Map<string, string[]>();
@@ -24,6 +52,9 @@ export async function listProducts() {
     aliases: byProduct.get(p.id) ?? [],
     imageMediaId: p.image_media_id,
     imageUrl: mediaUrl(p.image_media_id),
+    categoryId: p.category_id ?? OTHER_CATEGORY_ID,
+    categorySlug: p.category_slug ?? "other",
+    categoryName: p.category_name ?? "Other",
   }));
 }
 
@@ -35,6 +66,8 @@ export async function createProduct(
     description?: string | null;
     aliases?: string[];
     imageMediaId?: string | null;
+    categoryId?: string | null;
+    categorySlug?: string | null;
   },
 ) {
   if (user.role !== "MERCHANT") throw ApiError.forbidden("Merchants only");
@@ -45,13 +78,14 @@ export async function createProduct(
   if (!sku) {
     sku = `SKU-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 900 + 100)}`;
   }
+  const categoryId = await resolveCategoryId(input.categoryId || input.categorySlug || null);
   const id = uuid();
   const now = new Date();
   try {
     await pool.query(
-      `INSERT INTO products (id, sku, name, description, image_media_id, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$6)`,
-      [id, sku, name, input.description?.trim() || null, input.imageMediaId || null, now],
+      `INSERT INTO products (id, sku, name, description, image_media_id, category_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$7)`,
+      [id, sku, name, input.description?.trim() || null, input.imageMediaId || null, categoryId, now],
     );
   } catch {
     throw ApiError.conflict("SKU_TAKEN", "SKU already exists");
@@ -64,6 +98,7 @@ export async function createProduct(
       alias,
     ]);
   }
+  const cats = await pool.query(`SELECT slug, name FROM product_categories WHERE id = $1`, [categoryId]);
   return {
     id,
     sku,
@@ -72,7 +107,10 @@ export async function createProduct(
     aliases,
     imageMediaId: input.imageMediaId || null,
     imageUrl: mediaUrl(input.imageMediaId),
+    categoryId,
+    categorySlug: cats.rows[0]?.slug ?? "other",
+    categoryName: cats.rows[0]?.name ?? "Other",
   };
 }
 
-export { formatNaira };
+export { formatNaira, OTHER_CATEGORY_ID };

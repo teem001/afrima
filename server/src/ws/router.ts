@@ -12,6 +12,8 @@ import * as payments from "../services/paymentService.js";
 import * as twins from "../services/twinService.js";
 import * as ai from "../services/ai/agent.js";
 import * as reviews from "../services/reviewService.js";
+import * as preferences from "../services/preferenceService.js";
+import * as notifications from "../services/notificationService.js";
 import { emit } from "./hub.js";
 
 function requireUser(user: AuthUser | null): AuthUser {
@@ -58,10 +60,32 @@ export async function dispatch(
     case "me":
       return auth.me(requireUser(session.user));
 
-    case "search":
-      return search.search(payload as never);
+    case "search": {
+      const result = await search.search(payload as never);
+      if (session.user?.role === "CONSUMER") {
+        const body = payload as {
+          q?: string;
+          lat?: number;
+          lng?: number;
+          categoryId?: string;
+          categorySlug?: string;
+        };
+        void preferences
+          .trackEvent(session.user.id, {
+            type: "SEARCH",
+            query: body.q || body.categorySlug || null,
+            categoryId: body.categoryId || result.offers[0]?.categoryId || null,
+            latitude: body.lat ?? null,
+            longitude: body.lng ?? null,
+          })
+          .catch(() => undefined);
+      }
+      return result;
+    }
     case "catalog.products":
       return catalog.listProducts();
+    case "catalog.categories":
+      return catalog.listCategories();
     case "catalog.products.create":
       return catalog.createProduct(requireUser(session.user), payload as never);
 
@@ -146,6 +170,25 @@ export async function dispatch(
         requireUser(session.user),
         String((payload as { orderId: string }).orderId),
       );
+
+    case "prefs.me":
+      return preferences.getProfile(requireUser(session.user));
+    case "prefs.aiReview":
+      return preferences.generateAiReview(requireUser(session.user));
+
+    case "notifications.list":
+      return notifications.list(requireUser(session.user));
+    case "notifications.unreadCount":
+      return notifications.unreadCount(requireUser(session.user));
+    case "notifications.markRead":
+      return notifications.markRead(
+        requireUser(session.user),
+        (payload as { notificationId?: string })?.notificationId ?? null,
+      );
+    case "notifications.subscriptions":
+      return notifications.listSubscriptions(requireUser(session.user));
+    case "notifications.subscribe":
+      return notifications.upsertSubscription(requireUser(session.user), payload as never);
 
     case "ai.status":
       return ai.status();

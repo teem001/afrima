@@ -3,6 +3,7 @@ import type { AuthUser } from "../../auth/jwt.js";
 import { aiConfigured, config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { ApiError } from "../../errors.js";
+import * as preferences from "../preferenceService.js";
 import { complete, type ChatMessage } from "./openai.js";
 import { systemPrompt, type AiClientContext } from "./prompts.js";
 import { definitionsFor, invokeTool } from "./tools.js";
@@ -46,6 +47,50 @@ async function openConversation(user: AuthUser, conversationId: string | undefin
   return id;
 }
 
+async function recentToolSummary(conversationId: string): Promise<string | null> {
+  const res = await pool.query(
+    `SELECT tool_name, result_json, success FROM ai_tool_invocations
+     WHERE conversation_id = $1 AND success = TRUE
+     ORDER BY seq DESC LIMIT 8`,
+    [conversationId],
+  );
+  if (!res.rows.length) return null;
+  const lines: string[] = ["Recent tool results (use these storeId/productId values for PLACE_ORDER — do not invent ids):"];
+  for (const row of [...res.rows].reverse()) {
+    let parsed: {
+      data?: {
+        offers?: { storeId: string; storeName: string; productId: string; productName: string; unitPrice: string; quantity: number }[];
+        alternatives?: { storeId: string; storeName: string; productId: string; productName: string; unitPrice: string; quantity: number }[];
+        orderId?: string;
+        total?: string;
+      };
+    } | null = null;
+    try {
+      parsed = JSON.parse(String(row.result_json));
+    } catch {
+      parsed = null;
+    }
+    const offers = parsed?.data?.offers ?? parsed?.data?.alternatives ?? [];
+    if (offers.length) {
+      lines.push(
+        `${row.tool_name}: ` +
+          offers
+            .slice(0, 5)
+            .map(
+              (o) =>
+                `${o.productName} @ ${o.storeName} (storeId=${o.storeId}, productId=${o.productId}, ₦${o.unitPrice}, qty=${o.quantity})`,
+            )
+            .join("; "),
+      );
+    } else if (parsed?.data?.orderId) {
+      lines.push(`${row.tool_name}: orderId=${parsed.data.orderId} total=₦${parsed.data.total ?? "?"}`);
+    } else {
+      lines.push(`${row.tool_name}: ok`);
+    }
+  }
+  return lines.join("\n");
+}
+
 async function history(conversationId: string, limit: number): Promise<ChatMessage[]> {
   const res = await pool.query(
     `SELECT role, content FROM ai_messages WHERE conversation_id = $1 ORDER BY seq ASC`,
@@ -53,7 +98,15 @@ async function history(conversationId: string, limit: number): Promise<ChatMessa
   );
   const rows = res.rows.filter((r) => r.role === "user" || r.role === "assistant");
   const sliced = rows.slice(-limit);
-  return sliced.map((r) => ({ role: r.role as "user" | "assistant", content: r.content }));
+  const messages: ChatMessage[] = sliced.map((r) => ({
+    role: r.role as "user" | "assistant",
+    content: r.content,
+  }));
+  const toolSummary = await recentToolSummary(conversationId);
+  if (toolSummary) {
+    messages.push({ role: "system", content: toolSummary });
+  }
+  return messages;
 }
 
 async function nextSeq(conversationId: string) {
@@ -124,10 +177,13 @@ export async function chat(
   const conversationId = await openConversation(user, input.conversationId, userMessage);
   onProgress({ requestId, phase: "conversation", conversationId });
 
+  const shopperSnippet =
+    user.role === "CONSUMER" ? await preferences.profilePromptSnippet(user.id).catch(() => null) : null;
+
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: systemPrompt(user, input.latitude, input.longitude, input.context),
+      content: systemPrompt(user, input.latitude, input.longitude, input.context, shopperSnippet),
     },
     ...(await history(conversationId, config.openai.historyWindow)),
     { role: "user", content: userMessage },
@@ -156,6 +212,7 @@ export async function chat(
         user,
         latitude: input.latitude,
         longitude: input.longitude,
+        cart: input.context?.cart ?? null,
       });
       executions.push(execution);
       onProgress({

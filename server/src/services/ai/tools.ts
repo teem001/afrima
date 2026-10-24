@@ -7,12 +7,16 @@ import * as inventory from "../inventoryService.js";
 import * as orders from "../orderService.js";
 import * as payments from "../paymentService.js";
 import * as reviews from "../reviewService.js";
+import * as catalog from "../catalogService.js";
+import * as preferences from "../preferenceService.js";
 import type { ToolSpec } from "./openai.js";
+import type { AiClientContext } from "./prompts.js";
 
 export type ToolContext = {
   user: AuthUser;
   latitude?: number | null;
   longitude?: number | null;
+  cart?: AiClientContext["cart"] | null;
 };
 
 export type ToolResult = {
@@ -82,6 +86,15 @@ const TOOLS: ToolDef[] = [
         radiusMeters: radiusMeters ?? null,
         pageSize: 20,
       });
+      void preferences
+        .trackEvent(ctx.user.id, {
+          type: "SEARCH",
+          query,
+          latitude: lat,
+          longitude: lng,
+          categoryId: result.offers[0]?.categoryId ?? null,
+        })
+        .catch(() => undefined);
       const minQty = Math.max(1, num(args, "minQuantity", 1) ?? 1);
       const offers = result.offers.filter((o) => o.quantity >= minQty).slice(0, 10);
       if (!offers.length) {
@@ -96,6 +109,68 @@ const TOOLS: ToolDef[] = [
       return {
         success: true,
         data: { query, radiusMeters: radiusMeters ?? null, count: offers.length, totalCount: result.totalCount, offers },
+      };
+    },
+  },
+  {
+    name: "LIST_CATEGORIES",
+    description: "List product categories shoppers can browse (staples, beverages, etc.).",
+    roles: ["CONSUMER", "MERCHANT"],
+    parameters: { type: "object", properties: {} },
+    async execute() {
+      const categories = await catalog.listCategories();
+      return { success: true, data: { count: categories.length, categories } };
+    },
+  },
+  {
+    name: "SEARCH_BY_CATEGORY",
+    description: "Find in-stock offers in a product category, nearest first. Pass categorySlug (e.g. beverages) or categoryId.",
+    roles: ["CONSUMER"],
+    parameters: {
+      type: "object",
+      properties: {
+        categorySlug: { type: "string" },
+        categoryId: { type: "string" },
+        latitude: { type: "number" },
+        longitude: { type: "number" },
+        radiusMeters: { type: "integer" },
+      },
+      required: [],
+    },
+    async execute(args, ctx) {
+      const { lat, lng } = requireLocation(ctx, args);
+      const categorySlug = typeof args.categorySlug === "string" ? args.categorySlug.trim() : null;
+      const categoryId = typeof args.categoryId === "string" ? args.categoryId.trim() : null;
+      if (!categorySlug && !categoryId) {
+        return { success: false, errorCode: "VALIDATION_FAILED", message: "categorySlug or categoryId required" };
+      }
+      const radiusMeters = num(args, "radiusMeters");
+      const result = await search.search({
+        lat,
+        lng,
+        categorySlug,
+        categoryId,
+        radiusMeters: radiusMeters ?? null,
+        pageSize: 20,
+      });
+      void preferences
+        .trackEvent(ctx.user.id, {
+          type: "SEARCH",
+          query: categorySlug || categoryId,
+          categoryId: categoryId || result.offers[0]?.categoryId || null,
+          latitude: lat,
+          longitude: lng,
+        })
+        .catch(() => undefined);
+      return {
+        success: true,
+        data: {
+          categorySlug,
+          categoryId,
+          count: result.offers.length,
+          totalCount: result.totalCount,
+          offers: result.offers.slice(0, 10),
+        },
       };
     },
   },
@@ -256,6 +331,49 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "PLACE_CART_ORDER",
+    description:
+      "Place an order for the shopper's current app cart (storeId + productIds from client context). Confirm with the user first.",
+    roles: ["CONSUMER"],
+    parameters: { type: "object", properties: {} },
+    async execute(_args, ctx) {
+      const cart = ctx.cart;
+      if (!cart?.storeId || !cart.items?.length) {
+        return {
+          success: false,
+          errorCode: "VALIDATION_FAILED",
+          message: "Cart is empty or missing storeId/productIds — ask them to add items or use PLACE_ORDER",
+        };
+      }
+      const items = cart.items
+        .filter((i) => i.productId)
+        .map((i) => ({
+          productId: String(i.productId),
+          quantity: Math.max(1, Math.floor(Number(i.quantity) || 1)),
+        }));
+      if (!items.length) {
+        return {
+          success: false,
+          errorCode: "VALIDATION_FAILED",
+          message: "Cart items are missing productIds",
+        };
+      }
+      const order = await orders.place(ctx.user, { storeId: cart.storeId, items }, emit);
+      return {
+        success: true,
+        message: `Order placed for ₦${order.total}`,
+        data: {
+          orderId: order.id,
+          total: order.total,
+          totalKobo: order.totalKobo,
+          ledgerHash: order.ledgerHash,
+          status: order.status,
+          items: order.items,
+        },
+      };
+    },
+  },
+  {
     name: "GET_MY_ORDERS",
     description: "List the shopper's recent orders.",
     roles: ["CONSUMER"],
@@ -349,6 +467,26 @@ const TOOLS: ToolDef[] = [
     async execute(args) {
       const summary = await reviews.forProduct(str(args, "productId"), num(args, "limit", 10) ?? 10);
       return { success: true, data: summary };
+    },
+  },
+  {
+    name: "GET_SHOPPER_PROFILE",
+    description: "Load this shopper's preferences, recent searches, and AI shopper review for personalised suggestions.",
+    roles: ["CONSUMER"],
+    parameters: { type: "object", properties: {} },
+    async execute(_args, ctx) {
+      const profile = await preferences.getProfile(ctx.user);
+      return { success: true, data: profile };
+    },
+  },
+  {
+    name: "REFRESH_SHOPPER_REVIEW",
+    description: "Regenerate the AI written shopper review from their recent behaviour. Confirm with the user first.",
+    roles: ["CONSUMER"],
+    parameters: { type: "object", properties: {} },
+    async execute(_args, ctx) {
+      const profile = await preferences.generateAiReview(ctx.user);
+      return { success: true, message: "Shopper review updated", data: profile };
     },
   },
   {
