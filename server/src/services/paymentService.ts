@@ -184,10 +184,20 @@ export async function orderPayment(orderId: string) {
   const res = await pool.query(`SELECT * FROM escrow_holds WHERE order_id = $1`, [orderId]);
   const h = res.rows[0];
   if (!h) {
-    return { orderId, status: "UNPAID", amountKobo: 0, amount: "0.00", commissionKobo: 0, commission: "0.00" };
+    return {
+      orderId,
+      status: "UNPAID",
+      amountKobo: 0,
+      amount: "0.00",
+      commissionKobo: 0,
+      commission: "0.00",
+      netKobo: 0,
+      net: "0.00",
+    };
   }
   const amountKobo = Number(h.amount_kobo);
   const commissionKobo = Number(h.commission_kobo);
+  const netKobo = amountKobo - commissionKobo;
   const status = h.status === "HELD" ? "IN_ESCROW" : h.status === "RELEASED" ? "RELEASED" : "REFUNDED";
   return {
     orderId,
@@ -196,6 +206,8 @@ export async function orderPayment(orderId: string) {
     amount: formatNaira(amountKobo),
     commissionKobo,
     commission: formatNaira(commissionKobo),
+    netKobo,
+    net: formatNaira(netKobo),
   };
 }
 
@@ -228,7 +240,7 @@ export async function merchantSummary(user: AuthUser) {
   );
   const paid = await pool.query(
     `SELECT COALESCE(SUM(amount_kobo),0) AS paid
-     FROM payouts WHERE merchant_id = $1 AND status IN ('PAID','COMPLETED','SIMULATED')`,
+     FROM payouts WHERE merchant_id = $1 AND status IN ('PAID','COMPLETED','SIMULATED','SIMULATED_PAID')`,
     [user.id],
   );
   const payouts = await myPayouts(user);

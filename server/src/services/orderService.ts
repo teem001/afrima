@@ -46,7 +46,7 @@ function mapOrder(
     ledgerHash: row.ledger_hash,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    lines: lines.map((l) => {
+    items: lines.map((l) => {
       const unitPriceKobo = Number(l.unit_price_kobo);
       return {
         productId: l.product_id,
@@ -262,7 +262,7 @@ export async function verify(orderId: string) {
     view.consumerId,
     view.storeId,
     String(view.totalKobo),
-    ...view.lines.map((l) => `${l.productId}:${l.quantity}:${l.unitPriceKobo}`),
+    ...view.items.map((l) => `${l.productId}:${l.quantity}:${l.unitPriceKobo}`),
   ]);
   const anchor = await pool.query(
     `SELECT b.merkle_root, b.tx_reference, b.status, i.leaf_index
@@ -270,14 +270,17 @@ export async function verify(orderId: string) {
     [orderId],
   );
   const a = anchor.rows[0];
+  const hashMatches = recomputed === view.ledgerHash;
   return {
     orderId,
     ledgerHash: view.ledgerHash,
-    valid: recomputed === view.ledgerHash,
+    hashMatches,
+    valid: hashMatches,
     anchored: !!a,
     merkleRoot: a?.merkle_root ?? null,
     txReference: a?.tx_reference ?? null,
     leafIndex: a?.leaf_index ?? null,
     anchorStatus: a?.status ?? null,
+    proofValid: hashMatches && !!a,
   };
 }
