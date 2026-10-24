@@ -17,9 +17,12 @@ async function resolveCategoryId(input) {
     if (!input?.trim())
         return OTHER_CATEGORY_ID;
     const value = input.trim();
-    const byId = await pool.query(`SELECT id FROM product_categories WHERE id = $1`, [value]);
-    if (byId.rows[0])
-        return byId.rows[0].id;
+    const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+    if (looksLikeUuid) {
+        const byId = await pool.query(`SELECT id FROM product_categories WHERE id = $1`, [value]);
+        if (byId.rows[0])
+            return byId.rows[0].id;
+    }
     const bySlug = await pool.query(`SELECT id FROM product_categories WHERE slug = $1`, [value.toLowerCase()]);
     if (bySlug.rows[0])
         return bySlug.rows[0].id;
