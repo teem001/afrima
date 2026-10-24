@@ -1,5 +1,15 @@
 import { config } from "../../config.js";
 import { ApiError } from "../../errors.js";
+export function textContent(content) {
+    if (typeof content === "string")
+        return content;
+    if (!content)
+        return "";
+    return content
+        .filter((p) => p.type === "text")
+        .map((p) => p.text)
+        .join("\n");
+}
 export async function complete(messages, tools) {
     const { apiKey, baseUrl, model } = config.openai;
     if (!apiKey)

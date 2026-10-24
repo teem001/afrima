@@ -3,7 +3,7 @@ import { aiConfigured, config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { ApiError } from "../../errors.js";
 import * as preferences from "../preferenceService.js";
-import { complete } from "./openai.js";
+import { complete, textContent } from "./openai.js";
 import { systemPrompt } from "./prompts.js";
 import { definitionsFor, invokeTool } from "./tools.js";
 const FALLBACK = "Sorry, I couldn't finish that request. Could you rephrase it or break it into smaller steps?";
@@ -134,12 +134,12 @@ export async function chat(user, input, requestId, onProgress = () => undefined)
         const response = await complete(messages, tools);
         const calls = response.tool_calls ?? [];
         if (!calls.length) {
-            reply = response.content;
+            reply = textContent(response.content);
             break;
         }
         messages.push({
             role: "assistant",
-            content: response.content,
+            content: textContent(response.content) || null,
             tool_calls: calls,
         });
         for (const call of calls) {

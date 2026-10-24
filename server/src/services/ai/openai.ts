@@ -1,9 +1,13 @@
 import { config } from "../../config.js";
 import { ApiError } from "../../errors.js";
 
+export type VisionContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail?: "low" | "high" | "auto" } };
+
 export type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
+  content: string | null | VisionContentPart[];
   tool_calls?: ToolCall[];
   tool_call_id?: string;
 };
@@ -22,6 +26,15 @@ export type ToolSpec = {
     parameters: Record<string, unknown>;
   };
 };
+
+export function textContent(content: ChatMessage["content"]): string {
+  if (typeof content === "string") return content;
+  if (!content) return "";
+  return content
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("\n");
+}
 
 export async function complete(
   messages: ChatMessage[],

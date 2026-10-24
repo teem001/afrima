@@ -4,7 +4,7 @@ import { aiConfigured, config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { ApiError } from "../../errors.js";
 import * as preferences from "../preferenceService.js";
-import { complete, type ChatMessage } from "./openai.js";
+import { complete, textContent, type ChatMessage } from "./openai.js";
 import { systemPrompt, type AiClientContext } from "./prompts.js";
 import { definitionsFor, invokeTool } from "./tools.js";
 
@@ -198,12 +198,12 @@ export async function chat(
     const response = await complete(messages, tools);
     const calls = response.tool_calls ?? [];
     if (!calls.length) {
-      reply = response.content;
+      reply = textContent(response.content);
       break;
     }
     messages.push({
       role: "assistant",
-      content: response.content,
+      content: textContent(response.content) || null,
       tool_calls: calls,
     });
     for (const call of calls) {

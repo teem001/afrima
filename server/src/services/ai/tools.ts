@@ -113,6 +113,56 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "SEARCH_BY_IMAGE",
+    description:
+      "Find in-stock products that match a photo the shopper already uploaded (pass mediaId from the app). Uses vision then shop search.",
+    roles: ["CONSUMER"],
+    parameters: {
+      type: "object",
+      properties: {
+        mediaId: { type: "string", description: "Uploaded media asset id" },
+        latitude: { type: "number" },
+        longitude: { type: "number" },
+        radiusMeters: { type: "integer" },
+      },
+      required: ["mediaId"],
+    },
+    async execute(args, ctx) {
+      const mediaId = str(args, "mediaId");
+      const { lat, lng } = requireLocation(ctx, args);
+      const radiusMeters = num(args, "radiusMeters");
+      const result = await search.searchByImage({
+        mediaId,
+        lat,
+        lng,
+        radiusMeters: radiusMeters ?? null,
+        pageSize: 20,
+      });
+      void preferences
+        .trackEvent(ctx.user.id, {
+          type: "SEARCH",
+          query: result.query,
+          categoryId: result.offers[0]?.categoryId ?? null,
+          latitude: lat,
+          longitude: lng,
+          payload: { mediaId, vision: result.visionDescription },
+        })
+        .catch(() => undefined);
+      return {
+        success: true,
+        message: result.visionDescription,
+        data: {
+          mediaId,
+          description: result.visionDescription,
+          queries: result.queries,
+          count: result.offers.length,
+          totalCount: result.totalCount,
+          offers: result.offers.slice(0, 10),
+        },
+      };
+    },
+  },
+  {
     name: "LIST_CATEGORIES",
     description: "List product categories shoppers can browse (staples, beverages, etc.).",
     roles: ["CONSUMER", "MERCHANT"],

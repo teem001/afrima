@@ -82,6 +82,30 @@ export async function dispatch(
       }
       return result;
     }
+    case "search.byImage": {
+      const body = payload as {
+        mediaId: string;
+        lat: number;
+        lng: number;
+        radiusMeters?: number | null;
+        page?: number;
+        pageSize?: number;
+      };
+      const result = await search.searchByImage(body);
+      if (session.user?.role === "CONSUMER") {
+        void preferences
+          .trackEvent(session.user.id, {
+            type: "SEARCH",
+            query: result.query,
+            categoryId: result.offers[0]?.categoryId || null,
+            latitude: body.lat ?? null,
+            longitude: body.lng ?? null,
+            payload: { mediaId: body.mediaId, vision: result.visionDescription, queries: result.queries },
+          })
+          .catch(() => undefined);
+      }
+      return result;
+    }
     case "catalog.products":
       return catalog.listProducts();
     case "catalog.categories":

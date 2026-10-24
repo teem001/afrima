@@ -1,7 +1,10 @@
 import { pool } from "../db/pool.js";
+import { ApiError } from "../errors.js";
+import { aiConfigured } from "../config.js";
 import { haversineMeters, isOpenNow } from "../geo.js";
 import { formatNaira } from "../money.js";
-import { mediaUrl } from "./mediaService.js";
+import { getBytes, mediaUrl } from "./mediaService.js";
+import { complete, textContent } from "./ai/openai.js";
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 function mapOffer(row, lat, lng) {
@@ -121,6 +124,121 @@ export async function search(input) {
         latitude: input.lat,
         longitude: input.lng,
         radiusMeters: radius,
+        page: safePage,
+        pageSize,
+        totalCount,
+        totalPages,
+        hasMore: safePage < totalPages,
+        resultCount: pageOffers.length,
+        minPriceKobo,
+        maxPriceKobo,
+        minPrice: minPriceKobo == null ? null : formatNaira(minPriceKobo),
+        maxPrice: maxPriceKobo == null ? null : formatNaira(maxPriceKobo),
+        offers: pageOffers,
+    };
+}
+async function identifyProductFromImage(dataUrl) {
+    if (!aiConfigured()) {
+        throw ApiError.badRequest("AI_UNAVAILABLE", "Image search needs OPENAI_API_KEY on the server");
+    }
+    const message = await complete([
+        {
+            role: "system",
+            content: 'You identify grocery/household products in photos for a Lagos marketplace search. Reply with ONLY JSON: {"description":"short what you see","queries":["search phrase 1","search phrase 2"],"categorySlug":"staples|beverages|household|personal_care|snacks|fresh|electronics|other|null"}. queries should be 1–3 short shopper search terms (brand + product if clear).',
+        },
+        {
+            role: "user",
+            content: [
+                { type: "text", text: "What product is this? Give marketplace search queries." },
+                { type: "image_url", image_url: { url: dataUrl, detail: "low" } },
+            ],
+        },
+    ], []);
+    const raw = textContent(message.content);
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+        return { description: raw.slice(0, 200) || "Product in photo", queries: ["product"], categorySlug: null };
+    }
+    try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const queries = Array.isArray(parsed.queries)
+            ? parsed.queries.map((q) => String(q).trim()).filter(Boolean).slice(0, 3)
+            : [];
+        const slug = parsed.categorySlug && parsed.categorySlug !== "null" ? String(parsed.categorySlug) : null;
+        return {
+            description: String(parsed.description || "Product in photo").slice(0, 240),
+            queries: queries.length ? queries : ["product"],
+            categorySlug: slug,
+        };
+    }
+    catch {
+        return { description: "Product in photo", queries: ["product"], categorySlug: null };
+    }
+}
+/** Vision → text queries → in-stock offers (same ranking as keyword search). */
+export async function searchByImage(input) {
+    const asset = await getBytes(input.mediaId);
+    if (!asset)
+        throw ApiError.notFound("Image not found");
+    if (!asset.contentType.startsWith("image/")) {
+        throw ApiError.badRequest("VALIDATION_FAILED", "Image search requires a photo, not a video");
+    }
+    const dataUrl = `data:${asset.contentType};base64,${asset.data.toString("base64")}`;
+    const guess = await identifyProductFromImage(dataUrl);
+    const seen = new Map();
+    for (const q of guess.queries) {
+        const page = await search({
+            q,
+            lat: input.lat,
+            lng: input.lng,
+            radiusMeters: input.radiusMeters ?? null,
+            page: 1,
+            pageSize: 30,
+            categorySlug: null,
+        });
+        for (const offer of page.offers) {
+            const key = `${offer.storeId}:${offer.productId}`;
+            if (!seen.has(key))
+                seen.set(key, offer);
+        }
+    }
+    // If text queries miss, try category browse as a soft fallback.
+    if (!seen.size && guess.categorySlug) {
+        const page = await search({
+            lat: input.lat,
+            lng: input.lng,
+            radiusMeters: input.radiusMeters ?? null,
+            page: 1,
+            pageSize: 30,
+            categorySlug: guess.categorySlug,
+        });
+        for (const offer of page.offers) {
+            const key = `${offer.storeId}:${offer.productId}`;
+            if (!seen.has(key))
+                seen.set(key, offer);
+        }
+    }
+    const offers = [...seen.values()].sort((a, b) => a.distanceMeters - b.distanceMeters || a.unitPriceKobo - b.unitPriceKobo);
+    const pageSize = Math.min(50, Math.max(1, Math.floor(Number(input.pageSize) || 20)));
+    const page = Math.max(1, Math.floor(Number(input.page) || 1));
+    const totalCount = offers.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * pageSize;
+    const pageOffers = offers.slice(start, start + pageSize);
+    const prices = offers.map((o) => o.unitPriceKobo);
+    const minPriceKobo = prices.length ? Math.min(...prices) : null;
+    const maxPriceKobo = prices.length ? Math.max(...prices) : null;
+    const primaryQuery = guess.queries[0] || guess.description;
+    return {
+        query: primaryQuery,
+        queries: guess.queries,
+        visionDescription: guess.description,
+        categorySlug: guess.categorySlug,
+        mediaId: input.mediaId,
+        latitude: input.lat,
+        longitude: input.lng,
+        radiusMeters: input.radiusMeters ?? null,
         page: safePage,
         pageSize,
         totalCount,

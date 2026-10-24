@@ -4,7 +4,7 @@ import { aiConfigured, config } from "../config.js";
 import { pool } from "../db/pool.js";
 import { ApiError } from "../errors.js";
 import { formatNaira } from "../money.js";
-import { complete } from "./ai/openai.js";
+import { complete, textContent } from "./ai/openai.js";
 
 export type BehaviorType = "SEARCH" | "ORDER" | "VIEW_OFFER" | "REVIEW";
 
@@ -312,7 +312,7 @@ export async function generateAiReview(user: AuthUser) {
     ],
     [],
   );
-  const review = (message.content || "").trim().slice(0, 2000) || "Not enough shopping history yet to write a review.";
+  const review = textContent(message.content).trim().slice(0, 2000) || "Not enough shopping history yet to write a review.";
   const now = new Date();
   await pool.query(
     `INSERT INTO shopper_preferences (user_id, last_ai_review, last_ai_review_at, updated_at)

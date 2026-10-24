@@ -62,6 +62,23 @@ export async function dispatch(type, payload, session) {
             }
             return result;
         }
+        case "search.byImage": {
+            const body = payload;
+            const result = await search.searchByImage(body);
+            if (session.user?.role === "CONSUMER") {
+                void preferences
+                    .trackEvent(session.user.id, {
+                    type: "SEARCH",
+                    query: result.query,
+                    categoryId: result.offers[0]?.categoryId || null,
+                    latitude: body.lat ?? null,
+                    longitude: body.lng ?? null,
+                    payload: { mediaId: body.mediaId, vision: result.visionDescription, queries: result.queries },
+                })
+                    .catch(() => undefined);
+            }
+            return result;
+        }
         case "catalog.products":
             return catalog.listProducts();
         case "catalog.categories":
