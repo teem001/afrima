@@ -10,6 +10,7 @@ import * as search from "../services/searchService.js";
 import * as orders from "../services/orderService.js";
 import * as payments from "../services/paymentService.js";
 import * as twins from "../services/twinService.js";
+import * as ai from "../services/ai/agent.js";
 import { emit } from "./hub.js";
 
 function requireUser(user: AuthUser | null): AuthUser {
@@ -17,10 +18,17 @@ function requireUser(user: AuthUser | null): AuthUser {
   return user;
 }
 
+export type DispatchSession = {
+  user: AuthUser | null;
+  setUser: (u: AuthUser | null) => void;
+  requestId?: string | null;
+  sendEvent?: (event: string, data: unknown) => void;
+};
+
 export async function dispatch(
   type: string,
   payload: Record<string, unknown> | undefined,
-  session: { user: AuthUser | null; setUser: (u: AuthUser | null) => void },
+  session: DispatchSession,
 ): Promise<unknown> {
   switch (type) {
     case "ping":
@@ -129,9 +137,23 @@ export async function dispatch(
       return twins.simulate(requireUser(session.user), payload as never);
 
     case "ai.status":
-      return { engine: "NONE", configured: false, model: null };
-    case "ai.chat":
-      throw ApiError.badRequest("AI_UNAVAILABLE", "AI assistant is not configured on this Node deployment yet");
+      return ai.status();
+    case "ai.chat": {
+      const user = requireUser(session.user);
+      const requestId = session.requestId || "ai";
+      return ai.chat(
+        user,
+        {
+          conversationId: payload?.conversationId ? String(payload.conversationId) : undefined,
+          message: String(payload?.message ?? ""),
+          latitude: payload?.latitude != null ? Number(payload.latitude) : undefined,
+          longitude: payload?.longitude != null ? Number(payload.longitude) : undefined,
+          context: (payload?.context as import("../services/ai/prompts.js").AiClientContext) || undefined,
+        },
+        requestId,
+        (progress) => session.sendEvent?.("ai.progress", progress),
+      );
+    }
 
     case "anchors.pending":
       return null;

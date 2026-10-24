@@ -61,4 +61,15 @@ export const config = {
   searchMaxResults: 50,
   timezone: "Africa/Lagos",
   memoryDb: useMemoryDb(),
+  openai: {
+    apiKey: (process.env.OPENAI_API_KEY || "").trim(),
+    baseUrl: (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, ""),
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    maxToolRounds: Number(process.env.AFRISMART_AI_MAX_TOOL_ROUNDS || 6),
+    historyWindow: Number(process.env.AFRISMART_AI_HISTORY_WINDOW || 12),
+  },
 };
+
+export function aiConfigured(): boolean {
+  return Boolean(config.openai.apiKey);
+}

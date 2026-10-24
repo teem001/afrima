@@ -64,7 +64,16 @@ async function main() {
           };
           id = msg.id ?? null;
           if (!msg.type) throw ApiError.badRequest("VALIDATION_FAILED", "Missing type");
-          const data = await dispatch(msg.type, msg.payload, { user: session.user, setUser });
+          const data = await dispatch(msg.type, msg.payload, {
+            user: session.user,
+            setUser,
+            requestId: id,
+            sendEvent: (event, data) => {
+              if (socket.readyState === 1) {
+                socket.send(JSON.stringify({ type: "event", event, data }));
+              }
+            },
+          });
           socket.send(JSON.stringify({ type: "response", id, ok: true, data }));
         } catch (e) {
           const error =
