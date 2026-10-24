@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { config } from "./config.js";
 import { migrate } from "./db/migrate.js";
-import { pool } from "./db/pool.js";
+import { getPool } from "./db/pool.js";
 import { ApiError } from "./errors.js";
 import { registerHttpRoutes } from "./http/routes.js";
 import { addClient, removeClient, type ClientSession } from "./ws/hub.js";
@@ -11,11 +11,20 @@ import { dispatch } from "./ws/router.js";
 import type { AuthUser } from "./auth/jwt.js";
 
 async function main() {
-  await migrate();
+  let ready = false;
+  let bootError: string | null = null;
 
   const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024 });
   await app.register(cors, { origin: true });
   await app.register(websocket);
+
+  // Health is registered early so Vercel probes don't kill a slow boot.
+  app.get("/actuator/health", async (_req, reply) => {
+    if (!ready) {
+      return reply.status(503).send({ status: "STARTING", error: bootError });
+    }
+    return { status: "UP", db: config.memoryDb ? "memory" : "postgres" };
+  });
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ApiError) {
@@ -45,6 +54,9 @@ async function main() {
       socket.on("message", async (raw) => {
         let id: string | null = null;
         try {
+          if (!ready) {
+            throw ApiError.badRequest("STARTING", "Server is still starting — retry in a moment");
+          }
           const msg = JSON.parse(String(raw)) as {
             id?: string;
             type?: string;
@@ -75,16 +87,24 @@ async function main() {
 
   const shutdown = async () => {
     await app.close();
-    await pool.end();
+    await getPool().end().catch(() => undefined);
     process.exit(0);
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
-  app.log.info(
-    `AfriSmart Node API on :${config.port} (db=${config.memoryDb ? "memory" : "postgres"})`,
-  );
+  app.log.info(`AfriSmart Node API listening on :${config.port}`);
+
+  try {
+    getPool();
+    await migrate();
+    ready = true;
+    app.log.info(`AfriSmart ready (db=${config.memoryDb ? "memory" : "postgres"})`);
+  } catch (e) {
+    bootError = e instanceof Error ? e.message : String(e);
+    app.log.error({ err: e }, "Database bootstrap failed");
+  }
 }
 
 main().catch((e) => {

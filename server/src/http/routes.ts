@@ -4,8 +4,6 @@ import { ApiError } from "../errors.js";
 import * as media from "../services/mediaService.js";
 
 export async function registerHttpRoutes(app: FastifyInstance) {
-  app.get("/actuator/health", async () => ({ status: "UP" }));
-
   app.post<{ Body: { contentType: string; data: string } }>("/api/v1/media", async (req, reply) => {
     const header = req.headers.authorization || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";

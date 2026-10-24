@@ -1,5 +1,5 @@
 import pg from "pg";
-import { PGlite } from "@electric-sql/pglite";
+import { newDb } from "pg-mem";
 import { config, toPgConnectionString, useMemoryDb } from "../config.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,28 +18,51 @@ export type PoolClient = DbClient & { release: () => void };
 export type AppPool = DbClient & {
   connect: () => Promise<PoolClient>;
   end: () => Promise<void>;
-  /** Run a multi-statement SQL script (migrations). */
   exec: (sql: string) => Promise<void>;
 };
 
-/** Naive split on `;` outside of simple quotes — enough for our Flyway SQL files. */
 function splitStatements(sql: string): string[] {
   const parts: string[] = [];
   let cur = "";
   let inSingle = false;
+  let inLineComment = false;
   for (let i = 0; i < sql.length; i++) {
     const ch = sql[i]!;
+    const next = sql[i + 1];
+    if (inLineComment) {
+      cur += ch;
+      if (ch === "\n") inLineComment = false;
+      continue;
+    }
+    if (!inSingle && ch === "-" && next === "-") {
+      inLineComment = true;
+      cur += ch;
+      continue;
+    }
     if (ch === "'" && sql[i - 1] !== "\\") inSingle = !inSingle;
     if (ch === ";" && !inSingle) {
       const stmt = cur.trim();
-      if (stmt) parts.push(stmt);
+      // Skip comment-only chunks (e.g. "-- note with a semi; more text")
+      const withoutComments = stmt
+        .split("\n")
+        .map((line) => line.replace(/--.*$/, "").trim())
+        .filter(Boolean)
+        .join("\n");
+      if (withoutComments) parts.push(stmt);
       cur = "";
       continue;
     }
     cur += ch;
   }
   const tail = cur.trim();
-  if (tail) parts.push(tail);
+  if (tail) {
+    const withoutComments = tail
+      .split("\n")
+      .map((line) => line.replace(/--.*$/, "").trim())
+      .filter(Boolean)
+      .join("\n");
+    if (withoutComments) parts.push(tail);
+  }
   return parts;
 }
 
@@ -73,45 +96,15 @@ function wrapPgPool(pool: pg.Pool): AppPool {
   };
 }
 
-function wrapPGlite(db: PGlite): AppPool {
-  let chain: Promise<void> = Promise.resolve();
-
-  const runQuery = async <T = any>(text: string, params?: unknown[]) => {
-    const r = await db.query(text, params ?? []);
-    const rows = (r.rows ?? []) as T[];
-    const affected = (r as { affectedRows?: number }).affectedRows;
-    return { rows, rowCount: affected ?? rows.length };
-  };
-
-  return {
-    query: runQuery,
-    async connect() {
-      let releaseGate!: () => void;
-      const prev = chain;
-      chain = new Promise<void>((resolve) => {
-        releaseGate = resolve;
-      });
-      await prev;
-      return {
-        query: runQuery,
-        release: () => releaseGate(),
-      };
-    },
-    async exec(sql: string) {
-      await db.exec(sql);
-    },
-    async end() {
-      await db.close();
-    },
-  };
+function createMemoryPool(): AppPool {
+  console.log("Using in-memory Postgres (pg-mem) — set AFRISMART_DB_URL for a real database");
+  const mem = newDb({ autoCreateForeignKeyIndices: true });
+  const adapters = mem.adapters.createPg();
+  const pool = new adapters.Pool() as unknown as pg.Pool;
+  return wrapPgPool(pool);
 }
 
-async function createPool(): Promise<AppPool> {
-  if (useMemoryDb()) {
-    console.log("Using in-memory Postgres (PGlite) — set AFRISMART_DB_URL for a real database");
-    const db = await PGlite.create();
-    return wrapPGlite(db);
-  }
+function createExternalPool(): AppPool {
   const pool = new pg.Pool({
     connectionString: toPgConnectionString(),
     max: config.poolSize,
@@ -121,10 +114,26 @@ async function createPool(): Promise<AppPool> {
   return wrapPgPool(pool);
 }
 
-export const pool: AppPool = await createPool();
+let _pool: AppPool | null = null;
+
+export function getPool(): AppPool {
+  if (!_pool) {
+    _pool = useMemoryDb() ? createMemoryPool() : createExternalPool();
+  }
+  return _pool;
+}
+
+/** @deprecated use getPool() — kept for existing imports */
+export const pool: AppPool = new Proxy({} as AppPool, {
+  get(_t, prop, receiver) {
+    const p = getPool() as unknown as Record<string | symbol, unknown>;
+    const value = Reflect.get(p, prop, receiver);
+    return typeof value === "function" ? value.bind(p) : value;
+  },
+});
 
 export async function withTx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query("BEGIN");
     const result = await fn(client);

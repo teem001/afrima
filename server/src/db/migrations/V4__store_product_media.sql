@@ -1,4 +1,4 @@
--- H2 (PostgreSQL mode) rejects multi-column ADD with inline REFERENCES; add columns then FKs.
+-- Add media columns then FKs (H2 rejected multi-column ADD with inline REFERENCES).
 CREATE TABLE media_assets (
     id UUID PRIMARY KEY,
     owner_id UUID NOT NULL,
