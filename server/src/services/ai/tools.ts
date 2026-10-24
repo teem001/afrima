@@ -1,11 +1,12 @@
 import type { AuthUser } from "../../auth/jwt.js";
 import { ApiError } from "../../errors.js";
-import { config } from "../../config.js";
+import { emit } from "../../ws/hub.js";
 import * as search from "../searchService.js";
 import * as stores from "../storeService.js";
 import * as inventory from "../inventoryService.js";
 import * as orders from "../orderService.js";
 import * as payments from "../paymentService.js";
+import * as reviews from "../reviewService.js";
 import type { ToolSpec } from "./openai.js";
 
 export type ToolContext = {
@@ -73,23 +74,34 @@ const TOOLS: ToolDef[] = [
     async execute(args, ctx) {
       const query = str(args, "query");
       const { lat, lng } = requireLocation(ctx, args);
-      const radiusMeters = num(args, "radiusMeters", config.searchDefaultRadiusM);
-      const result = await search.search({ q: query, lat, lng, radiusMeters });
+      const radiusMeters = num(args, "radiusMeters");
+      const result = await search.search({
+        q: query,
+        lat,
+        lng,
+        radiusMeters: radiusMeters ?? null,
+        pageSize: 20,
+      });
       const minQty = Math.max(1, num(args, "minQuantity", 1) ?? 1);
       const offers = result.offers.filter((o) => o.quantity >= minQty).slice(0, 10);
       if (!offers.length) {
         return {
           success: true,
-          message: `No store within ${(radiusMeters! / 1000).toFixed(1)} km has '${query}' in stock.`,
-          data: { query, radiusMeters, count: 0, offers: [] },
+          message: radiusMeters
+            ? `No store within ${(radiusMeters / 1000).toFixed(1)} km has '${query}' in stock.`
+            : `No shop has '${query}' in stock.`,
+          data: { query, radiusMeters: radiusMeters ?? null, count: 0, offers: [] },
         };
       }
-      return { success: true, data: { query, radiusMeters, count: offers.length, offers } };
+      return {
+        success: true,
+        data: { query, radiusMeters: radiusMeters ?? null, count: offers.length, totalCount: result.totalCount, offers },
+      };
     },
   },
   {
     name: "COMPARE_PRICES",
-    description: "Compare nearby prices for a product, cheapest first.",
+    description: "Compare prices for a product across shops that have it in stock, cheapest first.",
     roles: ["CONSUMER"],
     parameters: {
       type: "object",
@@ -104,15 +116,24 @@ const TOOLS: ToolDef[] = [
     async execute(args, ctx) {
       const query = str(args, "query");
       const { lat, lng } = requireLocation(ctx, args);
-      const radiusMeters = num(args, "radiusMeters", config.searchDefaultRadiusM);
-      const result = await search.search({ q: query, lat, lng, radiusMeters });
+      const radiusMeters = num(args, "radiusMeters");
+      const result = await search.search({
+        q: query,
+        lat,
+        lng,
+        radiusMeters: radiusMeters ?? null,
+        pageSize: 50,
+      });
       const offers = [...result.offers].sort((a, b) => a.unitPriceKobo - b.unitPriceKobo).slice(0, 10);
-      return { success: true, data: { query, radiusMeters, count: offers.length, offers } };
+      return {
+        success: true,
+        data: { query, radiusMeters: radiusMeters ?? null, count: offers.length, offers },
+      };
     },
   },
   {
     name: "FIND_ALTERNATIVE_STORES",
-    description: "Find other nearby stores that stock a product, optionally excluding one store.",
+    description: "Find other stores that stock a product, optionally excluding one store.",
     roles: ["CONSUMER"],
     parameters: {
       type: "object",
@@ -128,9 +149,15 @@ const TOOLS: ToolDef[] = [
     },
     async execute(args, ctx) {
       const { lat, lng } = requireLocation(ctx, args);
-      const radiusMeters = num(args, "radiusMeters", config.searchDefaultRadiusM);
+      const radiusMeters = num(args, "radiusMeters");
       const q = typeof args.query === "string" && args.query.trim() ? args.query.trim() : "product";
-      const result = await search.search({ q, lat, lng, radiusMeters });
+      const result = await search.search({
+        q,
+        lat,
+        lng,
+        radiusMeters: radiusMeters ?? null,
+        pageSize: 50,
+      });
       const productId = typeof args.productId === "string" ? args.productId : null;
       const exclude = typeof args.excludeStoreId === "string" ? args.excludeStoreId : null;
       const alternatives = result.offers
@@ -209,7 +236,11 @@ const TOOLS: ToolDef[] = [
       if (!Array.isArray(items) || !items.length) {
         return { success: false, errorCode: "VALIDATION_FAILED", message: "Items required" };
       }
-      const order = await orders.place(ctx.user, { storeId, items }, () => undefined);
+      const normalized = items.map((item) => ({
+        productId: String(item.productId),
+        quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
+      }));
+      const order = await orders.place(ctx.user, { storeId, items: normalized }, emit);
       return {
         success: true,
         message: `Order placed for ₦${order.total}`,
@@ -219,6 +250,7 @@ const TOOLS: ToolDef[] = [
           totalKobo: order.totalKobo,
           ledgerHash: order.ledgerHash,
           status: order.status,
+          items: order.items,
         },
       };
     },
@@ -246,6 +278,77 @@ const TOOLS: ToolDef[] = [
       }
       const escrow = await payments.consumerSummary(ctx.user);
       return { success: true, data: { wallet, escrow } };
+    },
+  },
+  {
+    name: "FUND_WALLET",
+    description:
+      "Add demo funds to the shopper's wallet when they ask (or when PLACE_ORDER fails for insufficient balance). Amount in kobo (₦1 = 100 kobo).",
+    roles: ["CONSUMER"],
+    parameters: {
+      type: "object",
+      properties: {
+        amountKobo: {
+          type: "integer",
+          description: "Amount in kobo. Default 500000 (₦5,000). Max 5_000_000.",
+        },
+      },
+      required: [],
+    },
+    async execute(args, ctx) {
+      const amountKobo = Math.min(5_000_000, Math.max(100, Math.floor(num(args, "amountKobo", 500_000) ?? 500_000)));
+      const wallet = await payments.fundDemo(ctx.user, amountKobo);
+      return {
+        success: true,
+        message: `Added ₦${(amountKobo / 100).toFixed(2)}. New balance ₦${wallet.balance}`,
+        data: wallet,
+      };
+    },
+  },
+  {
+    name: "SUBMIT_PRODUCT_REVIEW",
+    description:
+      "Submit or update a 1–5 star review for a product the shopper has ordered. Ask for rating (and optional comment) first.",
+    roles: ["CONSUMER"],
+    parameters: {
+      type: "object",
+      properties: {
+        productId: { type: "string" },
+        rating: { type: "integer", description: "1 to 5 stars" },
+        comment: { type: "string" },
+        orderId: { type: "string", description: "Optional order that included the product" },
+      },
+      required: ["productId", "rating"],
+    },
+    async execute(args, ctx) {
+      const review = await reviews.create(ctx.user, {
+        productId: str(args, "productId"),
+        rating: num(args, "rating") ?? 0,
+        comment: typeof args.comment === "string" ? args.comment : null,
+        orderId: typeof args.orderId === "string" ? args.orderId : null,
+      });
+      return {
+        success: true,
+        message: `Saved ${review.rating}-star review for ${review.productName ?? "the product"}`,
+        data: review,
+      };
+    },
+  },
+  {
+    name: "GET_PRODUCT_REVIEWS",
+    description: "Read recent reviews and the average rating for a product.",
+    roles: ["CONSUMER", "MERCHANT"],
+    parameters: {
+      type: "object",
+      properties: {
+        productId: { type: "string" },
+        limit: { type: "integer" },
+      },
+      required: ["productId"],
+    },
+    async execute(args) {
+      const summary = await reviews.forProduct(str(args, "productId"), num(args, "limit", 10) ?? 10);
+      return { success: true, data: summary };
     },
   },
   {

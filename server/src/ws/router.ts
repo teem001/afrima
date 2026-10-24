@@ -11,6 +11,7 @@ import * as orders from "../services/orderService.js";
 import * as payments from "../services/paymentService.js";
 import * as twins from "../services/twinService.js";
 import * as ai from "../services/ai/agent.js";
+import * as reviews from "../services/reviewService.js";
 import { emit } from "./hub.js";
 
 function requireUser(user: AuthUser | null): AuthUser {
@@ -135,6 +136,16 @@ export async function dispatch(
       return twins.myTwin(requireUser(session.user));
     case "twin.simulate":
       return twins.simulate(requireUser(session.user), payload as never);
+
+    case "reviews.create":
+      return reviews.create(requireUser(session.user), payload as never);
+    case "reviews.forProduct":
+      return reviews.forProduct(String((payload as { productId: string }).productId));
+    case "reviews.forOrder":
+      return reviews.forOrder(
+        requireUser(session.user),
+        String((payload as { orderId: string }).orderId),
+      );
 
     case "ai.status":
       return ai.status();

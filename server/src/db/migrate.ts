@@ -18,21 +18,6 @@ function isIgnorableMigrationError(message: string): boolean {
 /** Prefer Flyway history if present (Java deploy already migrated); else use schema_migrations. */
 export async function migrate(): Promise<void> {
   try {
-    const flyway = await pool.query<{ exists: boolean | null }>(
-      `SELECT to_regclass('public.flyway_schema_history') IS NOT NULL AS exists`,
-    );
-    if (flyway.rows[0]?.exists) {
-      const applied = await pool.query(`SELECT version FROM flyway_schema_history WHERE success = true`);
-      if (applied.rowCount && applied.rowCount > 0) {
-        console.log(`DB already migrated via Flyway (${applied.rowCount} versions) — skipping`);
-        return;
-      }
-    }
-  } catch {
-    /* fresh memory DB — continue */
-  }
-
-  try {
     await pool.exec(`
       CREATE TABLE schema_migrations (
         version TEXT PRIMARY KEY,
@@ -42,6 +27,31 @@ export async function migrate(): Promise<void> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (!isIgnorableMigrationError(msg)) throw e;
+  }
+
+  // If an older Java/Flyway deploy already applied V1–Vn, mark those versions so we only run new ones.
+  try {
+    const flyway = await pool.query<{ exists: boolean | null }>(
+      `SELECT to_regclass('public.flyway_schema_history') IS NOT NULL AS exists`,
+    );
+    if (flyway.rows[0]?.exists) {
+      const applied = await pool.query<{ version: string }>(
+        `SELECT version FROM flyway_schema_history WHERE success = true`,
+      );
+      for (const row of applied.rows) {
+        const raw = String(row.version).trim();
+        const version = raw.startsWith("V") ? raw : `V${raw}`;
+        await pool.query(
+          `INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING`,
+          [version],
+        );
+      }
+      if (applied.rowCount) {
+        console.log(`Synced ${applied.rowCount} Flyway version(s) into schema_migrations`);
+      }
+    }
+  } catch {
+    /* fresh memory DB — continue */
   }
 
   const dir = path.join(__dirname, "migrations");
