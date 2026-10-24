@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "AfriSmart API — deploy with Dockerfile.vercel (container), not the Fastify preset",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
