@@ -64,7 +64,15 @@ export async function migrate(): Promise<void> {
     const sql = await readFile(path.join(dir, file), "utf8");
     // Statement-by-statement so a partial prior boot can resume without aborting the version.
     await pool.execTolerant(sql, isIgnorableMigrationError);
-    await pool.query(`INSERT INTO schema_migrations (version) VALUES ($1)`, [version]);
+    try {
+      await pool.query(
+        `INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING`,
+        [version],
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!isIgnorableMigrationError(msg)) throw e;
+    }
     console.log(`Applied migration ${file}`);
   }
 }
