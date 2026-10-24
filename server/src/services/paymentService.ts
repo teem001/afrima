@@ -76,7 +76,7 @@ export async function fundDemo(user: AuthUser, amountKobo: number) {
       amountKobo,
     ]);
     await record(client, "DEMO_FUND", null, "Demo wallet funding", [
-      { account: EXTERNAL_ACCOUNT, debit: 0, credit: amountKobo },
+      { account: EXTERNAL_ACCOUNT, debit: amountKobo, credit: 0 },
       { account: walletAccount(user.id), debit: 0, credit: amountKobo },
     ]);
     const updated = await client.query(`SELECT * FROM wallets WHERE id = $1`, [w.id]);
@@ -199,32 +199,60 @@ export async function orderPayment(orderId: string) {
   };
 }
 
+export async function consumerSummary(user: AuthUser) {
+  const held = await pool.query(
+    `SELECT COALESCE(SUM(amount_kobo),0) AS held, COUNT(*)::int AS n
+     FROM escrow_holds WHERE consumer_id = $1 AND status = 'HELD'`,
+    [user.id],
+  );
+  const inEscrowKobo = Number(held.rows[0].held);
+  return {
+    inEscrowKobo,
+    inEscrow: formatNaira(inEscrowKobo),
+    heldOrders: Number(held.rows[0].n),
+  };
+}
+
 export async function merchantSummary(user: AuthUser) {
   if (user.role !== "MERCHANT") throw ApiError.forbidden();
   const w = await getOrCreateWallet(pool, user.id);
   const escrow = await pool.query(
-    `SELECT COALESCE(SUM(amount_kobo),0) AS held, COALESCE(SUM(commission_kobo),0) AS commission
+    `SELECT COALESCE(SUM(amount_kobo),0) AS held
      FROM escrow_holds WHERE merchant_id = $1 AND status = 'HELD'`,
     [user.id],
   );
   const released = await pool.query(
-    `SELECT COALESCE(SUM(amount_kobo - commission_kobo),0) AS net
+    `SELECT COALESCE(SUM(amount_kobo),0) AS gross, COALESCE(SUM(commission_kobo),0) AS commission
      FROM escrow_holds WHERE merchant_id = $1 AND status = 'RELEASED'`,
     [user.id],
   );
+  const paid = await pool.query(
+    `SELECT COALESCE(SUM(amount_kobo),0) AS paid
+     FROM payouts WHERE merchant_id = $1 AND status IN ('PAID','COMPLETED','SIMULATED')`,
+    [user.id],
+  );
+  const payouts = await myPayouts(user);
+  const walletBalanceKobo = Number(w.balance_kobo);
   const inEscrowKobo = Number(escrow.rows[0].held);
-  const commissionKobo = Number(escrow.rows[0].commission);
-  const releasedKobo = Number(released.rows[0].net);
-  const availableKobo = Number(w.balance_kobo);
+  const releasedGrossKobo = Number(released.rows[0].gross);
+  const commissionKobo = Number(released.rows[0].commission);
+  const paidOutKobo = Number(paid.rows[0].paid);
   return {
-    availableKobo,
-    available: formatNaira(availableKobo),
+    walletBalanceKobo,
+    walletBalance: formatNaira(walletBalanceKobo),
+    availableKobo: walletBalanceKobo,
+    available: formatNaira(walletBalanceKobo),
     inEscrowKobo,
     inEscrow: formatNaira(inEscrowKobo),
-    releasedKobo,
-    released: formatNaira(releasedKobo),
+    releasedGrossKobo,
+    releasedGross: formatNaira(releasedGrossKobo),
+    releasedKobo: releasedGrossKobo - commissionKobo,
+    released: formatNaira(releasedGrossKobo - commissionKobo),
     commissionKobo,
     commission: formatNaira(commissionKobo),
+    paidOutKobo,
+    paidOut: formatNaira(paidOutKobo),
+    payouts,
     currency: "NGN",
   };
 }

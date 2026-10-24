@@ -1,7 +1,7 @@
 import type { AuthUser } from "../auth/jwt.js";
-import { pool } from "../db/pool.js";
 import { ApiError } from "../errors.js";
 import { formatNaira } from "../money.js";
+import * as auth from "./authService.js";
 import * as payments from "./paymentService.js";
 import * as inventory from "./inventoryService.js";
 import * as stores from "./storeService.js";
@@ -25,41 +25,50 @@ export async function shopTwin(user: AuthUser, storeId: string) {
     storeName: store.name,
     address: store.address,
     openNow: store.openNow,
+    imageUrl: store.imageUrl ?? null,
     stock: stock.map((s) => ({
       productId: s.productId,
+      productName: "",
+      sku: "",
+      imageUrl: null as string | null,
       quantity: s.quantity,
       unitPriceKobo: s.unitPriceKobo,
       unitPrice: s.unitPrice,
-      velocityPerDay: null,
+      unitsSold7d: 0,
+      velocityPerDay: 0,
       daysToStockout: null,
+      lowStock: s.quantity <= 5,
     })),
-    suggestions,
-    money: {
-      availableKobo: money.availableKobo,
-      available: money.available,
-      inEscrowKobo: money.inEscrowKobo,
-      inEscrow: money.inEscrow,
-      commissionKobo: money.commissionKobo,
-      commission: money.commission,
-    },
+    suggestions: suggestions.map((s) => ({
+      type: s.type,
+      message: s.message,
+      productId: s.productId,
+      suggestedQty: null,
+    })),
+    money,
   };
 }
 
 export async function myTwin(user: AuthUser) {
   if (user.role !== "CONSUMER") throw ApiError.forbidden();
-  const w = await payments.wallet(user);
-  const escrow = await pool.query(
-    `SELECT COALESCE(SUM(amount_kobo),0) AS held FROM escrow_holds WHERE consumer_id = $1 AND status = 'HELD'`,
-    [user.id],
-  );
+  const me = await auth.me(user);
+  const wallet = await payments.wallet(user);
+  const escrow = await payments.consumerSummary(user);
   const recent = await orders.mine(user);
-  const inEscrowKobo = Number(escrow.rows[0].held);
+  const totalSpentKobo = recent
+    .filter((o) => o.status !== "CANCELLED")
+    .reduce((sum, o) => sum + Number(o.totalKobo), 0);
   return {
-    walletBalanceKobo: w.balanceKobo,
-    walletBalance: w.balance,
-    inEscrowKobo,
-    inEscrow: formatNaira(inEscrowKobo),
-    recentOrders: recent.slice(0, 10),
+    userId: user.id,
+    email: user.email,
+    fullName: me.fullName,
+    role: user.role,
+    wallet,
+    escrow,
+    ordersCount: recent.length,
+    totalSpentKobo,
+    totalSpent: formatNaira(totalSpentKobo),
+    recentOrders: recent.slice(0, 5),
   };
 }
 
@@ -76,14 +85,18 @@ export async function simulate(
   const afterQty = item.quantity + restock;
   return {
     productId: input.productId,
+    productName: "",
     currentQuantity: item.quantity,
-    afterRestockQuantity: afterQty,
+    restockQty: restock,
+    currentPriceKobo: item.unitPriceKobo,
+    currentPrice: item.unitPrice,
+    simulatedPriceKobo,
+    simulatedPrice: formatNaira(simulatedPriceKobo),
+    velocityPerDay: 0,
     daysToStockoutNow: item.quantity === 0 ? 0 : null,
     daysToStockoutAfterRestock: afterQty === 0 ? 0 : null,
     projectedRevenue7dKobo: item.unitPriceKobo * Math.min(item.quantity, 7),
     projectedRevenue7d: formatNaira(item.unitPriceKobo * Math.min(item.quantity, 7)),
-    simulatedPriceKobo,
-    simulatedPrice: formatNaira(simulatedPriceKobo),
     simulatedRevenue7dKobo: simulatedPriceKobo * Math.min(afterQty, 7),
     simulatedRevenue7d: formatNaira(simulatedPriceKobo * Math.min(afterQty, 7)),
     note: "Lightweight simulation — velocity model not yet applied on Node backend.",
