@@ -1,5 +1,14 @@
 # Vercel Container Runtime (Beta) — runs this Spring Boot app as an OCI container Function.
 # Vercel sets $PORT (default 80); application.yaml reads it via server.port: ${PORT:${SERVER_PORT:8087}}.
+#
+# Required runtime env (inject in Vercel → Project → Settings → Environment Variables):
+#   AFRISMART_DB_URL=jdbc:postgresql://HOST:5432/DATABASE?sslmode=require
+#   AFRISMART_DB_USER=...
+#   AFRISMART_DB_PASSWORD=...
+# Optional:
+#   AFRISMART_DB_POOL_SIZE=5
+#   AFRISMART_JWT_SECRET=...
+#   AFRISMART_DEMO_SEED=false
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 COPY pom.xml .
@@ -12,12 +21,10 @@ RUN ./mvnw -q -DskipTests package
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/afrismart-0.0.1-SNAPSHOT.jar app.jar
-# Headless AWT + container-aware heap. Avoid file H2: /tmp is wiped on every cold start and
-# concurrent Fluid instances each re-run Flyway on an empty schema (looks like a restart loop).
 ENV JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
-ENV AFRISMART_DB_URL="jdbc:h2:mem:afrismart;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
 ENV AFRISMART_DEMO_SEED=false
-# Fit Vercel's ~30s SIGTERM grace window.
+ENV AFRISMART_H2_CONSOLE=false
 ENV SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE=25s
 ENV SERVER_SHUTDOWN=graceful
+# No DB URL baked in — must inject AFRISMART_DB_* at deploy time (PostgreSQL).
 ENTRYPOINT ["java", "-jar", "app.jar"]

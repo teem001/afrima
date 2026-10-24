@@ -2,12 +2,17 @@ spring:
   application:
     name: afrismart
   datasource:
+    # Production / Docker: set AFRISMART_DB_URL + USER + PASSWORD (PostgreSQL JDBC).
+    # Local default remains H2 so `./mvnw spring-boot:run` works without Postgres.
     url: ${AFRISMART_DB_URL:jdbc:h2:mem:afrismart;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1}
-    username: sa
-    password: ""
+    username: ${AFRISMART_DB_USER:sa}
+    password: ${AFRISMART_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${AFRISMART_DB_POOL_SIZE:5}
+      connection-timeout: 10000
   h2:
     console:
-      enabled: true
+      enabled: ${AFRISMART_H2_CONSOLE:false}
       path: /h2-console
   jpa:
     open-in-view: false
