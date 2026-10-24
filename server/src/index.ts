@@ -82,7 +82,9 @@ async function main() {
   process.on("SIGINT", shutdown);
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
-  app.log.info(`AfriSmart Node API on :${config.port}`);
+  app.log.info(
+    `AfriSmart Node API on :${config.port} (db=${config.memoryDb ? "memory" : "postgres"})`,
+  );
 }
 
 main().catch((e) => {

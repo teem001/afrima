@@ -13,6 +13,7 @@
     "migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.3.16",
     "@fastify/cors": "^11.0.1",
     "@fastify/websocket": "^11.0.2",
     "bcryptjs": "^3.0.2",
