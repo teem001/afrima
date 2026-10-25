@@ -306,7 +306,7 @@ const TOOLS = [
     },
     {
         name: "PLACE_ORDER",
-        description: "Place an order at a store after the user confirmed. Debits the wallet into escrow.",
+        description: "Place an order at a store after the user confirmed. Debits the wallet into escrow. Works even if the shop is currently closed (openNow=false).",
         roles: ["CONSUMER"],
         parameters: {
             type: "object",
@@ -353,7 +353,7 @@ const TOOLS = [
     },
     {
         name: "PLACE_CART_ORDER",
-        description: "Place an order for the shopper's current app cart (storeId + productIds from client context). Confirm with the user first.",
+        description: "Place an order for the shopper's current app cart (storeId + productIds from client context). Call this when they say Order my cart. Shop open/closed hours do not matter.",
         roles: ["CONSUMER"],
         parameters: { type: "object", properties: {} },
         async execute(_args, ctx) {
